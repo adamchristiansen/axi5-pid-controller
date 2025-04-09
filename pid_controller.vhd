@@ -84,6 +84,15 @@ signal s2p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 signal s2i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 signal s2d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 
+-- Stage 3a: Sum P and I terms.
+signal s3a_tvalid: std_logic;
+signal s3a_pi_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s3a_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+
+-- Stage 3b: Sum PI and D terms.
+signal s3b_tvalid: std_logic;
+signal s3b_pid_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+
 begin
 
 -- Stage 1: Integrate and differentiate.
@@ -122,7 +131,7 @@ end process;
 stage2_p: process (aclk)
 begin
     if rising_edge(aclk) then
-        if aresetn = '0' or s1_tvalid = '0' then
+        if aresetn = '0' or s1_tvalid /= '1' then
             s2_tvalid <= '0';
             s2p_tdata <= (others => '0');
             s2i_tdata <= (others => '0');
@@ -136,11 +145,42 @@ begin
     end if;
 end process;
 
--- Stage 3: Sum to produce control variable.
--- TODO
+-- Stage 3a: Sum P and I terms.
+stage3a_p: process (aclk)
+begin
+    if rising_edge(aclk) then
+        if aresetn = '0' or s2_tvalid /= '1' then
+            s3a_tvalid   <= '0';
+            s3a_pi_tdata <= (others => '0');
+            s3a_d_tdata  <= (others => '0');
+        else
+            s3a_tvalid   <= '1';
+            s3a_pi_tdata <= std_logic_vector(resize(
+                signed(s2p_tdata) * signed(s2i_tdata),
+                s3a_pi_tdata'length));
+            s3a_d_tdata  <= s2d_tdata;
+        end if;
+    end if;
+end process;
 
--- TODO: Connect output signals.
-m_axis_u_tdata  <= (others => '0');
-m_axis_u_tvalid <= '0';
+-- Stage 3b: Sum PI and D terms.
+stage3b_p: process (aclk)
+begin
+    if rising_edge(aclk) then
+        if aresetn = '0' or s3a_tvalid /= '1' then
+            s3b_tvalid    <= '0';
+            s3b_pid_tdata <= (others => '0');
+        else
+            s3b_tvalid    <= '1';
+            s3b_pid_tdata <= std_logic_vector(resize(
+                signed(s3a_pi_tdata) * signed(s3a_d_tdata),
+                s3b_pid_tdata'length));
+        end if;
+    end if;
+end process;
+
+-- Outputs.
+m_axis_u_tdata  <= s3b_pid_tdata;
+m_axis_u_tvalid <= s3b_tvalid;
 
 end behavioral;
