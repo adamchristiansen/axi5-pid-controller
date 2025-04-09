@@ -69,8 +69,57 @@ port(
 end pid_controller;
 
 architecture behavioral of pid_controller is
+
+-- Stage 1: Integrate and differentiate.
+signal s1_tvalid: std_logic;
+signal s1p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s1i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s1d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s1eprev_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s1eprev_tvalid: std_logic;
+
 begin
 
--- TODO: Implementation.
+-- Stage 1: Integrate and differentiate.
+stage1_p: process (aclk)
+begin
+    if rising_edge(aclk) then
+        if aresetn = '0' then
+            s1_tvalid      <= '0';
+            s1p_tdata      <= (others => '0');
+            s1i_tdata      <= (others => '0');
+            s1d_tdata      <= (others => '0');
+            s1eprev_tdata  <= (others => '0');
+            s1eprev_tvalid <= '0';
+        else
+            -- The idea is to delay the error signal by 1 so that the derivative can be computed
+            -- from its current and previous value.
+            if s_axis_e_tvalid = '1' then
+                s1eprev_tdata  <= s_axis_e_tdata;
+                s1eprev_tvalid <= s_axis_e_tvalid;
+            end if;
+            if s_axis_e_tvalid = '1' and s1eprev_tvalid = '1' then
+                s1_tvalid <= '1';
+                s1p_tdata <= s_axis_e_tdata;
+                s1i_tdata <= std_logic_vector(signed(s_axis_e_tdata) + signed(s1i_tdata));
+                s1d_tdata <= std_logic_vector(signed(s_axis_e_tdata) - signed(s1eprev_tdata));
+            else
+                s1_tvalid <= '0';
+                -- It is important to to set the other values to zero in here, because the
+                -- accumulator for the integrator must be preserved.
+            end if;
+        end if;
+    end if;
+end process;
+
+-- Stage 2: Multiply coefficients.
+-- TODO
+
+-- Stage 3: Sum to produce control variable.
+-- TODO
+
+-- TODO: Connect output signals.
+m_axis_u_tdata  <= (others => '0');
+m_axis_u_tvalid <= '0';
 
 end behavioral;
