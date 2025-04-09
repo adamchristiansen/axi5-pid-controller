@@ -72,17 +72,17 @@ architecture behavioral of pid_controller is
 
 -- Stage 1: Integrate and differentiate.
 signal s1_tvalid: std_logic;
-signal s1p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s1i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s1d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s1eprev_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s1eprev_tvalid: std_logic;
+signal s1_p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s1_i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s1_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s1_eprev_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s1_eprev_tvalid: std_logic;
 
 -- Stage 2: Multiply PID coefficients.
 signal s2_tvalid: std_logic;
-signal s2p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s2i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s2d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s2_p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s2_i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s2_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 
 -- Stage 3a: Sum P and I terms.
 signal s3a_tvalid: std_logic;
@@ -100,24 +100,24 @@ stage1_p: process (aclk)
 begin
     if rising_edge(aclk) then
         if aresetn = '0' then
-            s1_tvalid      <= '0';
-            s1p_tdata      <= (others => '0');
-            s1i_tdata      <= (others => '0');
-            s1d_tdata      <= (others => '0');
-            s1eprev_tdata  <= (others => '0');
-            s1eprev_tvalid <= '0';
+            s1_tvalid       <= '0';
+            s1_p_tdata      <= (others => '0');
+            s1_i_tdata      <= (others => '0');
+            s1_d_tdata      <= (others => '0');
+            s1_eprev_tdata  <= (others => '0');
+            s1_eprev_tvalid <= '0';
         else
             -- The idea is to delay the error signal by 1 so that the derivative can be computed
             -- from its current and previous value.
             if s_axis_e_tvalid = '1' then
-                s1eprev_tdata  <= s_axis_e_tdata;
-                s1eprev_tvalid <= s_axis_e_tvalid;
+                s1_eprev_tdata  <= s_axis_e_tdata;
+                s1_eprev_tvalid <= s_axis_e_tvalid;
             end if;
-            if s_axis_e_tvalid = '1' and s1eprev_tvalid = '1' then
-                s1_tvalid <= '1';
-                s1p_tdata <= s_axis_e_tdata;
-                s1i_tdata <= std_logic_vector(signed(s_axis_e_tdata) + signed(s1i_tdata));
-                s1d_tdata <= std_logic_vector(signed(s_axis_e_tdata) - signed(s1eprev_tdata));
+            if s_axis_e_tvalid = '1' and s1_eprev_tvalid = '1' then
+                s1_tvalid  <= '1';
+                s1_p_tdata <= s_axis_e_tdata;
+                s1_i_tdata <= std_logic_vector(signed(s_axis_e_tdata) + signed(s1_i_tdata));
+                s1_d_tdata <= std_logic_vector(signed(s_axis_e_tdata) - signed(s1_eprev_tdata));
             else
                 s1_tvalid <= '0';
                 -- It is important to to set the other values to zero in here, because the
@@ -132,15 +132,15 @@ stage2_p: process (aclk)
 begin
     if rising_edge(aclk) then
         if aresetn = '0' or s1_tvalid /= '1' then
-            s2_tvalid <= '0';
-            s2p_tdata <= (others => '0');
-            s2i_tdata <= (others => '0');
-            s2d_tdata <= (others => '0');
+            s2_tvalid  <= '0';
+            s2_p_tdata <= (others => '0');
+            s2_i_tdata <= (others => '0');
+            s2_d_tdata <= (others => '0');
         else
-            s2_tvalid <= '1';
-            s2p_tdata <= std_logic_vector(resize(signed(kp) * signed(s1p_tdata), s2p_tdata'length));
-            s2i_tdata <= std_logic_vector(resize(signed(ki) * signed(s1i_tdata), s2i_tdata'length));
-            s2d_tdata <= std_logic_vector(resize(signed(kd) * signed(s1d_tdata), s2d_tdata'length));
+            s2_tvalid  <= '1';
+            s2_p_tdata <= std_logic_vector(resize(signed(kp) * signed(s1_p_tdata), s2_p_tdata'length));
+            s2_i_tdata <= std_logic_vector(resize(signed(ki) * signed(s1_i_tdata), s2_i_tdata'length));
+            s2_d_tdata <= std_logic_vector(resize(signed(kd) * signed(s1_d_tdata), s2_d_tdata'length));
         end if;
     end if;
 end process;
@@ -156,9 +156,9 @@ begin
         else
             s3a_tvalid   <= '1';
             s3a_pi_tdata <= std_logic_vector(resize(
-                signed(s2p_tdata) * signed(s2i_tdata),
+                signed(s2_p_tdata) * signed(s2_i_tdata),
                 s3a_pi_tdata'length));
-            s3a_d_tdata  <= s2d_tdata;
+            s3a_d_tdata  <= s2_d_tdata;
         end if;
     end if;
 end process;
