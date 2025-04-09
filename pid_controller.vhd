@@ -78,6 +78,12 @@ signal s1d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 signal s1eprev_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 signal s1eprev_tvalid: std_logic;
 
+-- Stage 2: Multiply PID coefficients.
+signal s2_tvalid: std_logic;
+signal s2p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s2i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+signal s2d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+
 begin
 
 -- Stage 1: Integrate and differentiate.
@@ -112,8 +118,23 @@ begin
     end if;
 end process;
 
--- Stage 2: Multiply coefficients.
--- TODO
+-- Stage 2: Multiply PID coefficients.
+stage2_p: process (aclk)
+begin
+    if rising_edge(aclk) then
+        if aresetn = '0' or s1_tvalid = '0' then
+            s2_tvalid <= '0';
+            s2p_tdata <= (others => '0');
+            s2i_tdata <= (others => '0');
+            s2d_tdata <= (others => '0');
+        else
+            s2_tvalid <= '1';
+            s2p_tdata <= std_logic_vector(resize(signed(kp) * signed(s1p_tdata), s2p_tdata'length));
+            s2i_tdata <= std_logic_vector(resize(signed(ki) * signed(s1i_tdata), s2i_tdata'length));
+            s2d_tdata <= std_logic_vector(resize(signed(kd) * signed(s1d_tdata), s2d_tdata'length));
+        end if;
+    end if;
+end process;
 
 -- Stage 3: Sum to produce control variable.
 -- TODO
