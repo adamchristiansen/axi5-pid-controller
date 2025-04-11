@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install VHDL
+      - name: Install GHDL
         uses: ghdl/setup-ghdl@v1
       - name: Build
         run: make
