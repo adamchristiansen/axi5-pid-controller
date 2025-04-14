@@ -36,7 +36,9 @@ use ieee.std_logic_1164.all;
 --- # Generics
 ---
 --- - `DATA_WIDTH`: Width in bits of the input and output AXI4/5-Streams.
+--- - `DATA_RADIX: Radix position in bits of the fixed-point input and output AXI4/5-Streams.
 --- - `K_WIDTH`: Width in bits of the input `kp`, `ki`, and `kd` coefficients.
+--- - `K_RADIX: Radix position in bits of the input `kp`, `ki`, and `kd` coefficients.
 ---
 --- # Ports
 ---
@@ -50,7 +52,9 @@ use ieee.std_logic_1164.all;
 entity pid_controller is
 generic (
     DATA_WIDTH: natural := 16;
-    K_WIDTH: natural := DATA_WIDTH
+    DATA_RADIX: natural := 0;
+    K_WIDTH: natural := 16;
+    K_RADIX: natural := 0
 );
 port (
     aclk: in std_logic;
@@ -70,32 +74,144 @@ end pid_controller;
 
 architecture behavioral of pid_controller is
     -- Stage 1: Integrate and differentiate.
+    constant S1_P_DATA_WIDTH: natural := DATA_WIDTH;
+    constant S1_I_DATA_WIDTH: natural := DATA_WIDTH;
+    constant S1_D_DATA_WIDTH: natural := DATA_WIDTH;
+    constant S1_DATA_RADIX: natural := DATA_RADIX;
     signal s1_tvalid: std_logic;
-    signal s1_p_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal s1_i_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal s1_d_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s1_p_tdata: std_logic_vector(S1_P_DATA_WIDTH - 1 downto 0);
+    signal s1_i_tdata: std_logic_vector(S1_I_DATA_WIDTH - 1 downto 0);
+    signal s1_d_tdata: std_logic_vector(S1_D_DATA_WIDTH - 1 downto 0);
     signal s1_eprev_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal s1_eprev_tvalid: std_logic;
 
     -- Stage 2: Multiply PID coefficients.
+    constant S2_P_DATA_WIDTH: natural := S1_P_DATA_WIDTH + K_WIDTH;
+    constant S2_I_DATA_WIDTH: natural := S1_I_DATA_WIDTH + K_WIDTH;
+    constant S2_D_DATA_WIDTH: natural := S1_D_DATA_WIDTH + K_WIDTH;
+    constant S2_DATA_RADIX: natural := maximum(DATA_RADIX, K_RADIX);
     signal s2_tvalid: std_logic;
-    signal s2_p_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal s2_i_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal s2_d_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s2_p_tdata: std_logic_vector(S2_P_DATA_WIDTH - 1 downto 0);
+    signal s2_i_tdata: std_logic_vector(S2_I_DATA_WIDTH - 1 downto 0);
+    signal s2_d_tdata: std_logic_vector(S2_D_DATA_WIDTH - 1 downto 0);
 
     -- Stage 3a: Sum P and I terms.
     signal s3a_tvalid: std_logic;
-    signal s3a_pi_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal s3a_d_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    constant S3A_PI_DATA_WIDTH: natural := maximum(S2_P_DATA_WIDTH, S2_I_DATA_WIDTH);
+    constant S3A_D_DATA_WIDTH: natural := S2_D_DATA_WIDTH;
+    constant S3A_DATA_RADIX: natural := S2_DATA_RADIX;
+    signal s3a_pi_tdata: std_logic_vector(S3A_PI_DATA_WIDTH - 1 downto 0);
+    signal s3a_d_tdata: std_logic_vector(S3A_D_DATA_WIDTH - 1 downto 0);
 
     -- Stage 3b: Sum PI and D terms.
+    constant S3B_PID_DATA_WIDTH: natural := S3A_PI_DATA_WIDTH;
+    constant S3B_DATA_RADIX: natural := S3A_DATA_RADIX;
     signal s3b_tvalid: std_logic;
-    signal s3b_pid_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s3b_pid_tdata: std_logic_vector(S3B_PID_DATA_WIDTH - 1 downto 0);
+
+    --- Change the radix of a fixed-point number.
+    ---
+    --- # Arguments
+    --- - `a`: Original.
+    --- - `a_radix`: Radix of original.
+    --- - `r`: Return value storage.
+    --- - `r_radix`: Radix of return value.
+    ---
+    --- The return value itself is passed as an argument so that its size can be determined from its
+    --- attributes.
+    function fixed_radix(
+        a: std_logic_vector; a_radix: natural;
+        r: std_logic_vector; r_radix: natural
+    ) return std_logic_vector is
+        variable right_shift: integer := integer(a_radix) - integer(r_radix);
+    begin
+        -- TODO: What if the shift is negative? Does there need to be an if/else or does
+        --       shift_right() appropriately handle a negative shift?
+        return std_logic_vector(resize(shift_right(signed(a), right_shift), r'length));
+    end function;
+
+    --- Fixed-point addition where numbers are interpreted as signed.
+    ---
+    --- # Arguments
+    --- - `a`: Left hand side.
+    --- - `a_radix`: Radix of left hand side.
+    --- - `b`: Right hand side.
+    --- - `b_radix`: Radix of right hand side.
+    --- - `r`: Return value storage.
+    --- - `r_radix`: Radix of return value.
+    ---
+    --- The return value itself is passed as an argument so that its size can be determined from its
+    --- attributes.
+    function fixed_add(
+        a: std_logic_vector; a_radix: natural;
+        b: std_logic_vector; b_radix: natural;
+        r: std_logic_vector; r_radix: natural
+    ) return std_logic_vector is
+        variable right_shift: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
+    begin
+        -- TODO: What if the shift is negative? Does there need to be an if/else or does
+        --       shift_right() appropriately handle a negative shift?
+        return std_logic_vector(resize(shift_right(signed(a) + signed(b), right_shift), r'length));
+    end function;
+
+    --- Fixed-point subtraction where numbers are interpreted as signed.
+    ---
+    --- # Arguments
+    --- - `a`: Left hand side.
+    --- - `a_radix`: Radix of left hand side.
+    --- - `b`: Right hand side.
+    --- - `b_radix`: Radix of right hand side.
+    --- - `r`: Return value storage.
+    --- - `r_radix`: Radix of return value.
+    ---
+    --- The return value itself is passed as an argument so that its size can be determined from its
+    --- attributes.
+    function fixed_sub(
+        a: std_logic_vector; a_radix: natural;
+        b: std_logic_vector; b_radix: natural;
+        r: std_logic_vector; r_radix: natural
+    ) return std_logic_vector is
+        variable right_shift: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
+    begin
+        -- TODO: What if the shift is negative? Does there need to be an if/else or does
+        --       shift_right() appropriately handle a negative shift?
+        return std_logic_vector(resize(shift_right(signed(a) - signed(b), right_shift), r'length));
+    end function;
+
+    --- Fixed-point multiplication where numbers are interpreted as signed.
+    ---
+    --- # Arguments
+    --- - `a`: Left hand side.
+    --- - `a_radix`: Radix of left hand side.
+    --- - `b`: Right hand side.
+    --- - `b_radix`: Radix of right hand side.
+    --- - `r`: Return value storage.
+    --- - `r_radix`: Radix of return value.
+    ---
+    --- The return value itself is passed as an argument so that its size can be determined from its
+    --- attributes.
+    function fixed_mul(
+        a: std_logic_vector; a_radix: natural;
+        b: std_logic_vector; b_radix: natural;
+        r: std_logic_vector; r_radix: natural
+    ) return std_logic_vector is
+        variable right_shift: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
+    begin
+        -- TODO: What if the shift is negative? Does there need to be an if/else or does
+        --       shift_right() appropriately handle a negative shift?
+        return std_logic_vector(resize(shift_right(signed(a) * signed(b), right_shift), r'length));
+    end function;
 begin
 
 -- Assert that generics are valid.
 assert DATA_WIDTH mod 8 = 0
     report "DATA_WIDTH must be a multiple of 8"
+    severity failure;
+assert DATA_RADIX <= DATA_WIDTH
+    report "DATA_RADIX must be less than or equal to DATA_WIDTH"
+    severity failure;
+assert K_RADIX <= K_WIDTH
+    report "K_RADIX must be less than or equal to K_WIDTH"
     severity failure;
 
 -- Stage 1: Integrate and differentiate.
@@ -119,8 +235,14 @@ begin
             if s_axis_e_tvalid = '1' and s1_eprev_tvalid = '1' then
                 s1_tvalid  <= '1';
                 s1_p_tdata <= s_axis_e_tdata;
-                s1_i_tdata <= std_logic_vector(signed(s_axis_e_tdata) + signed(s1_i_tdata));
-                s1_d_tdata <= std_logic_vector(signed(s_axis_e_tdata) - signed(s1_eprev_tdata));
+                s1_i_tdata <= fixed_add(
+                    s_axis_e_tdata, DATA_RADIX,
+                    s1_i_tdata, S1_DATA_RADIX,
+                    s1_i_tdata, S1_DATA_RADIX);
+                s1_d_tdata <= fixed_sub(
+                    s_axis_e_tdata, DATA_RADIX,
+                    s1_eprev_tdata, DATA_RADIX,
+                    s1_d_tdata, S1_DATA_RADIX);
             else
                 s1_tvalid <= '0';
                 -- It is important to to set the other values to zero in here, because the
@@ -141,9 +263,18 @@ begin
             s2_d_tdata <= (others => '0');
         else
             s2_tvalid  <= '1';
-            s2_p_tdata <= std_logic_vector(resize(signed(kp) * signed(s1_p_tdata), s2_p_tdata'length));
-            s2_i_tdata <= std_logic_vector(resize(signed(ki) * signed(s1_i_tdata), s2_i_tdata'length));
-            s2_d_tdata <= std_logic_vector(resize(signed(kd) * signed(s1_d_tdata), s2_d_tdata'length));
+            s2_p_tdata <= fixed_mul(
+                kp, K_RADIX,
+                s1_p_tdata, S1_DATA_RADIX,
+                s2_p_tdata, S2_DATA_RADIX);
+            s2_i_tdata <= fixed_mul(
+                ki, K_RADIX,
+                s1_i_tdata, S1_DATA_RADIX,
+                s2_i_tdata, S2_DATA_RADIX);
+            s2_d_tdata <= fixed_mul(
+                kd, K_RADIX,
+                s1_d_tdata, S1_DATA_RADIX,
+                s2_d_tdata, S2_DATA_RADIX);
         end if;
     end if;
 end process;
@@ -158,9 +289,10 @@ begin
             s3a_d_tdata  <= (others => '0');
         else
             s3a_tvalid   <= '1';
-            s3a_pi_tdata <= std_logic_vector(resize(
-                signed(s2_p_tdata) * signed(s2_i_tdata),
-                s3a_pi_tdata'length));
+            s3a_pi_tdata <= fixed_add(
+                s2_p_tdata, S2_DATA_RADIX,
+                s2_i_tdata, S2_DATA_RADIX,
+                s3a_pi_tdata, S3A_DATA_RADIX);
             s3a_d_tdata  <= s2_d_tdata;
         end if;
     end if;
@@ -175,15 +307,16 @@ begin
             s3b_pid_tdata <= (others => '0');
         else
             s3b_tvalid    <= '1';
-            s3b_pid_tdata <= std_logic_vector(resize(
-                signed(s3a_pi_tdata) * signed(s3a_d_tdata),
-                s3b_pid_tdata'length));
+            s3b_pid_tdata <= fixed_add(
+                s3a_pi_tdata, S3A_DATA_RADIX,
+                s3a_d_tdata, S3A_DATA_RADIX,
+                s3b_pid_tdata, S3B_DATA_RADIX);
         end if;
     end if;
 end process;
 
 -- Outputs.
-m_axis_u_tdata  <= s3b_pid_tdata;
+m_axis_u_tdata  <= fixed_radix(s3b_pid_tdata, S3B_DATA_RADIX, m_axis_u_tdata, DATA_RADIX);
 m_axis_u_tvalid <= s3b_tvalid;
 
 end behavioral;
