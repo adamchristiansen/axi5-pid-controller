@@ -38,7 +38,9 @@ use ieee.std_logic_1164.all;
 --- - `DATA_WIDTH`: Width in bits of the input and output AXI4/5-Streams.
 --- - `DATA_RADIX: Radix position in bits of the fixed-point input and output AXI4/5-Streams.
 --- - `K_WIDTH`: Width in bits of the input `kp`, `ki`, and `kd` coefficients.
---- - `K_RADIX: Radix position in bits of the input `kp`, `ki`, and `kd` coefficients.
+--- - `K_RADIX`: Radix position in bits of the input `kp`, `ki`, and `kd` coefficients.
+--- - `INTEGRATOR_WIDTH`: Width in bits of the internal integrator. Can be used to set the
+---   integrator width larger than `DATA_WIDTH` to prevent early saturation of the integrator.
 ---
 --- # Ports
 ---
@@ -53,8 +55,9 @@ entity pid_controller is
 generic (
     DATA_WIDTH: natural := 16;
     DATA_RADIX: natural := 0;
-    K_WIDTH: natural := 16;
-    K_RADIX: natural := 0
+    K_WIDTH: natural := DATA_WIDTH;
+    K_RADIX: natural := 0;
+    INTEGRATOR_WIDTH: natural := DATA_WIDTH
 );
 port (
     aclk: in std_logic;
@@ -75,7 +78,7 @@ end pid_controller;
 architecture behavioral of pid_controller is
     -- Stage 1: Integrate and differentiate.
     constant S1_P_DATA_WIDTH: natural := DATA_WIDTH;
-    constant S1_I_DATA_WIDTH: natural := DATA_WIDTH;
+    constant S1_I_DATA_WIDTH: natural := INTEGRATOR_WIDTH;
     constant S1_D_DATA_WIDTH: natural := DATA_WIDTH;
     constant S1_DATA_RADIX: natural := DATA_RADIX;
     signal s1_tvalid: std_logic;
@@ -212,6 +215,9 @@ assert DATA_RADIX <= DATA_WIDTH
     severity failure;
 assert K_RADIX <= K_WIDTH
     report "K_RADIX must be less than or equal to K_WIDTH"
+    severity failure;
+assert INTEGRATOR_WIDTH >= DATA_WIDTH
+    report "INTEGRATOR_WIDTH must be greater than or equal to K_WIDTH"
     severity failure;
 
 -- Stage 1: Integrate and differentiate.
