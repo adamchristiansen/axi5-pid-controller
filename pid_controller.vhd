@@ -93,6 +93,11 @@ architecture behavioral of pid_controller is
     signal s3b_pid_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 begin
 
+-- Assert that generics are valid.
+assert TDATA_WIDTH mod 8 = 0
+    report "TDATA_WIDTH must be a multiple of 8"
+    severity failure;
+
 -- Stage 1: Integrate and differentiate.
 stage1_p: process (aclk)
 begin
