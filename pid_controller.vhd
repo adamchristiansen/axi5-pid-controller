@@ -52,7 +52,7 @@ generic (
     TDATA_WIDTH: natural := 16;
     K_WIDTH: natural := TDATA_WIDTH
 );
-port(
+port (
     aclk: in std_logic;
     aresetn: in std_logic;
     -- Input signal.
@@ -69,30 +69,28 @@ port(
 end pid_controller;
 
 architecture behavioral of pid_controller is
+    -- Stage 1: Integrate and differentiate.
+    signal s1_tvalid: std_logic;
+    signal s1_p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s1_i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s1_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s1_eprev_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s1_eprev_tvalid: std_logic;
 
--- Stage 1: Integrate and differentiate.
-signal s1_tvalid: std_logic;
-signal s1_p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s1_i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s1_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s1_eprev_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s1_eprev_tvalid: std_logic;
+    -- Stage 2: Multiply PID coefficients.
+    signal s2_tvalid: std_logic;
+    signal s2_p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s2_i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s2_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 
--- Stage 2: Multiply PID coefficients.
-signal s2_tvalid: std_logic;
-signal s2_p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s2_i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s2_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    -- Stage 3a: Sum P and I terms.
+    signal s3a_tvalid: std_logic;
+    signal s3a_pi_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s3a_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 
--- Stage 3a: Sum P and I terms.
-signal s3a_tvalid: std_logic;
-signal s3a_pi_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-signal s3a_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-
--- Stage 3b: Sum PI and D terms.
-signal s3b_tvalid: std_logic;
-signal s3b_pid_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-
+    -- Stage 3b: Sum PI and D terms.
+    signal s3b_tvalid: std_logic;
+    signal s3b_pid_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
 begin
 
 -- Stage 1: Integrate and differentiate.
