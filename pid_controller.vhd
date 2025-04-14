@@ -97,14 +97,14 @@ architecture behavioral of pid_controller is
 
     -- Stage 3a: Sum P and I terms.
     signal s3a_tvalid: std_logic;
-    constant S3A_PI_DATA_WIDTH: natural := maximum(S2_P_DATA_WIDTH, S2_I_DATA_WIDTH);
-    constant S3A_D_DATA_WIDTH: natural := S2_D_DATA_WIDTH;
+    constant S3A_PD_DATA_WIDTH: natural := maximum(S2_P_DATA_WIDTH, S2_D_DATA_WIDTH);
+    constant S3A_I_DATA_WIDTH: natural := S2_I_DATA_WIDTH;
     constant S3A_DATA_RADIX: natural := S2_DATA_RADIX;
-    signal s3a_pi_tdata: std_logic_vector(S3A_PI_DATA_WIDTH - 1 downto 0);
-    signal s3a_d_tdata: std_logic_vector(S3A_D_DATA_WIDTH - 1 downto 0);
+    signal s3a_pd_tdata: std_logic_vector(S3A_PD_DATA_WIDTH - 1 downto 0);
+    signal s3a_i_tdata: std_logic_vector(S3A_I_DATA_WIDTH - 1 downto 0);
 
     -- Stage 3b: Sum PI and D terms.
-    constant S3B_PID_DATA_WIDTH: natural := S3A_PI_DATA_WIDTH;
+    constant S3B_PID_DATA_WIDTH: natural := maximum(S3A_PD_DATA_WIDTH, S3A_I_DATA_WIDTH);
     constant S3B_DATA_RADIX: natural := S3A_DATA_RADIX;
     signal s3b_tvalid: std_logic;
     signal s3b_pid_tdata: std_logic_vector(S3B_PID_DATA_WIDTH - 1 downto 0);
@@ -285,15 +285,15 @@ begin
     if rising_edge(aclk) then
         if aresetn = '0' or s2_tvalid /= '1' then
             s3a_tvalid   <= '0';
-            s3a_pi_tdata <= (others => '0');
-            s3a_d_tdata  <= (others => '0');
+            s3a_pd_tdata <= (others => '0');
+            s3a_i_tdata  <= (others => '0');
         else
             s3a_tvalid   <= '1';
-            s3a_pi_tdata <= fixed_add(
+            s3a_pd_tdata <= fixed_add(
                 s2_p_tdata, S2_DATA_RADIX,
-                s2_i_tdata, S2_DATA_RADIX,
-                s3a_pi_tdata, S3A_DATA_RADIX);
-            s3a_d_tdata  <= s2_d_tdata;
+                s2_d_tdata, S2_DATA_RADIX,
+                s3a_pd_tdata, S3A_DATA_RADIX);
+            s3a_i_tdata  <= s2_i_tdata;
         end if;
     end if;
 end process;
@@ -308,8 +308,8 @@ begin
         else
             s3b_tvalid    <= '1';
             s3b_pid_tdata <= fixed_add(
-                s3a_pi_tdata, S3A_DATA_RADIX,
-                s3a_d_tdata, S3A_DATA_RADIX,
+                s3a_pd_tdata, S3A_DATA_RADIX,
+                s3a_i_tdata, S3A_DATA_RADIX,
                 s3b_pid_tdata, S3B_DATA_RADIX);
         end if;
     end if;
