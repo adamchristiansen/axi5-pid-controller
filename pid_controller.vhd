@@ -19,9 +19,9 @@ use ieee.std_logic_1164.all;
 ---         +---> kd * e(t)/dt -----+
 --- ```
 ---
---- The PID controller is used in in the following way, where `r(t)` is the setpoint and `y(t)` is
---- the process variable. The error signal fed to the PID controller is generally computed in same
---- way from the setpoint and process variable (often as the difference).
+--- The PID controller is used in the following way, where `r(t)` is the setpoint and `y(t)` is
+--- the process variable. The error signal fed to the PID controller is generally computed in the
+--- same way from the setpoint and process variable (often as the difference).
 ---
 ---  ```
 ---              e(t)                u(t)
@@ -30,8 +30,8 @@ use ieee.std_logic_1164.all;
 ---            +------------------------------------+
 ---  ```
 ---
---- The PID controller accepts `e(t)` rather than `s(t)` so it is possible to generate error
---- signals using more spohisticated approaches.
+--- The PID controller accepts `e(t)` rather than `s(t)`, so it is possible to generate error
+--- signals using more sophisticated approaches.
 ---
 --- # Generics
 ---
