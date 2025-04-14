@@ -35,7 +35,7 @@ use ieee.std_logic_1164.all;
 ---
 --- # Generics
 ---
---- - `TDATA_WIDTH`: Width in bits of the input and output AXI4/5-Streams.
+--- - `DATA_WIDTH`: Width in bits of the input and output AXI4/5-Streams.
 --- - `K_WIDTH`: Width in bits of the input `kp`, `ki`, and `kd` coefficients.
 ---
 --- # Ports
@@ -49,17 +49,17 @@ use ieee.std_logic_1164.all;
 --- - `kd`: Derivative coefficient as a signed fixed-point integer.
 entity pid_controller is
 generic (
-    TDATA_WIDTH: natural := 16;
-    K_WIDTH: natural := TDATA_WIDTH
+    DATA_WIDTH: natural := 16;
+    K_WIDTH: natural := DATA_WIDTH
 );
 port (
     aclk: in std_logic;
     aresetn: in std_logic;
     -- Input signal.
-    s_axis_e_tdata: in std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    s_axis_e_tdata: in std_logic_vector(DATA_WIDTH - 1 downto 0);
     s_axis_e_tvalid: in std_logic;
     -- Output signal.
-    m_axis_u_tdata: out std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    m_axis_u_tdata: out std_logic_vector(DATA_WIDTH - 1 downto 0);
     m_axis_u_tvalid: out std_logic;
     -- PID coefficients.
     kp: in std_logic_vector(K_WIDTH - 1 downto 0);
@@ -71,31 +71,31 @@ end pid_controller;
 architecture behavioral of pid_controller is
     -- Stage 1: Integrate and differentiate.
     signal s1_tvalid: std_logic;
-    signal s1_p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-    signal s1_i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-    signal s1_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-    signal s1_eprev_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s1_p_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s1_i_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s1_d_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s1_eprev_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal s1_eprev_tvalid: std_logic;
 
     -- Stage 2: Multiply PID coefficients.
     signal s2_tvalid: std_logic;
-    signal s2_p_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-    signal s2_i_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-    signal s2_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s2_p_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s2_i_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s2_d_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
 
     -- Stage 3a: Sum P and I terms.
     signal s3a_tvalid: std_logic;
-    signal s3a_pi_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
-    signal s3a_d_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s3a_pi_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s3a_d_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
 
     -- Stage 3b: Sum PI and D terms.
     signal s3b_tvalid: std_logic;
-    signal s3b_pid_tdata: std_logic_vector(TDATA_WIDTH - 1 downto 0);
+    signal s3b_pid_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
 begin
 
 -- Assert that generics are valid.
-assert TDATA_WIDTH mod 8 = 0
-    report "TDATA_WIDTH must be a multiple of 8"
+assert DATA_WIDTH mod 8 = 0
+    report "DATA_WIDTH must be a multiple of 8"
     severity failure;
 
 -- Stage 1: Integrate and differentiate.
