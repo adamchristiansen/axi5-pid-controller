@@ -79,29 +79,29 @@ architecture behavioral of pid_controller is
     -- Stage 1: Integrate and differentiate.
     constant S1_DATA_RADIX: natural := DATA_RADIX;
     signal s1_tvalid: std_logic;
-    signal s1_p_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal s1_i_tdata: std_logic_vector(INTEGRATOR_WIDTH - 1 downto 0);
-    signal s1_d_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
-    signal s1_eprev_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s1_p_tdata: signed(DATA_WIDTH - 1 downto 0);
+    signal s1_i_tdata: signed(INTEGRATOR_WIDTH - 1 downto 0);
+    signal s1_d_tdata: signed(DATA_WIDTH - 1 downto 0);
+    signal s1_eprev_tdata: signed(DATA_WIDTH - 1 downto 0);
     signal s1_eprev_tvalid: std_logic;
 
     -- Stage 2: Multiply PID coefficients.
     constant S2_DATA_RADIX: natural := maximum(DATA_RADIX, K_RADIX);
     signal s2_tvalid: std_logic;
-    signal s2_p_tdata: std_logic_vector(s1_p_tdata'length + K_WIDTH - 1 downto 0);
-    signal s2_i_tdata: std_logic_vector(s1_i_tdata'length + K_WIDTH - 1 downto 0);
-    signal s2_d_tdata: std_logic_vector(s1_d_tdata'length + K_WIDTH - 1 downto 0);
+    signal s2_p_tdata: signed(s1_p_tdata'length + K_WIDTH - 1 downto 0);
+    signal s2_i_tdata: signed(s1_i_tdata'length + K_WIDTH - 1 downto 0);
+    signal s2_d_tdata: signed(s1_d_tdata'length + K_WIDTH - 1 downto 0);
 
     -- Stage 3a: Sum P and I terms.
     constant S3A_DATA_RADIX: natural := S2_DATA_RADIX;
     signal s3a_tvalid: std_logic;
-    signal s3a_pd_tdata: std_logic_vector(maximum(s2_p_tdata'length, s2_d_tdata'length) - 1 downto 0);
-    signal s3a_i_tdata: std_logic_vector(s2_i_tdata'length - 1 downto 0);
+    signal s3a_pd_tdata: signed(maximum(s2_p_tdata'length, s2_d_tdata'length) - 1 downto 0);
+    signal s3a_i_tdata: signed(s2_i_tdata'length - 1 downto 0);
 
     -- Stage 3b: Sum PI and D terms.
     constant S3B_DATA_RADIX: natural := S3A_DATA_RADIX;
     signal s3b_tvalid: std_logic;
-    signal s3b_pid_tdata: std_logic_vector(maximum(s3a_pd_tdata'length, s3a_i_tdata'length) - 1 downto 0);
+    signal s3b_pid_tdata: signed(maximum(s3a_pd_tdata'length, s3a_i_tdata'length) - 1 downto 0);
 
     --- Perform an arithmetic right shift.
     ---
@@ -130,12 +130,12 @@ architecture behavioral of pid_controller is
     --- The return value itself is passed as an argument so that its size can be determined from its
     --- attributes.
     function fixed_radix(
-        a: std_logic_vector; a_radix: natural;
-        r: std_logic_vector; r_radix: natural
-    ) return std_logic_vector is
-        variable shift_count: integer := integer(a_radix) - integer(r_radix);
+        a: signed; a_radix: natural;
+        r: signed; r_radix: natural
+    ) return signed is
+        constant SHIFT_COUNT: integer := integer(a_radix) - integer(r_radix);
     begin
-        return std_logic_vector(resize(rshift(signed(a), shift_count), r'length));
+        return resize(rshift(a, SHIFT_COUNT), r'length);
     end function;
 
     --- Fixed-point addition where numbers are interpreted as signed.
@@ -151,13 +151,13 @@ architecture behavioral of pid_controller is
     --- The return value itself is passed as an argument so that its size can be determined from its
     --- attributes.
     function fixed_add(
-        a: std_logic_vector; a_radix: natural;
-        b: std_logic_vector; b_radix: natural;
-        r: std_logic_vector; r_radix: natural
-    ) return std_logic_vector is
-        variable shift_count: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
+        a: signed; a_radix: natural;
+        b: signed; b_radix: natural;
+        r: signed; r_radix: natural
+    ) return signed is
+        constant SHIFT_COUNT: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
     begin
-        return std_logic_vector(resize(rshift(signed(a) + signed(b), shift_count), r'length));
+        return resize(rshift(a + b, SHIFT_COUNT), r'length);
     end function;
 
     --- Fixed-point subtraction where numbers are interpreted as signed.
@@ -173,13 +173,12 @@ architecture behavioral of pid_controller is
     --- The return value itself is passed as an argument so that its size can be determined from its
     --- attributes.
     function fixed_sub(
-        a: std_logic_vector; a_radix: natural;
-        b: std_logic_vector; b_radix: natural;
-        r: std_logic_vector; r_radix: natural
-    ) return std_logic_vector is
-        variable shift_count: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
+        a: signed; a_radix: natural;
+        b: signed; b_radix: natural;
+        r: signed; r_radix: natural
+    ) return signed is
     begin
-        return std_logic_vector(resize(rshift(signed(a) - signed(b), shift_count), r'length));
+        return fixed_add(a, a_radix, -b, b_radix, r, r_radix);
     end function;
 
     --- Fixed-point multiplication where numbers are interpreted as signed.
@@ -195,13 +194,13 @@ architecture behavioral of pid_controller is
     --- The return value itself is passed as an argument so that its size can be determined from its
     --- attributes.
     function fixed_mul(
-        a: std_logic_vector; a_radix: natural;
-        b: std_logic_vector; b_radix: natural;
-        r: std_logic_vector; r_radix: natural
-    ) return std_logic_vector is
-        variable shift_count: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
+        a: signed; a_radix: natural;
+        b: signed; b_radix: natural;
+        r: signed; r_radix: natural
+    ) return signed is
+        constant SHIFT_COUNT: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
     begin
-        return std_logic_vector(resize(rshift(signed(a) * signed(b), shift_count), r'length));
+        return resize(rshift(a * b, SHIFT_COUNT), r'length);
     end function;
 begin
 
@@ -234,18 +233,18 @@ begin
             -- The idea is to delay the error signal by 1 so that the derivative can be computed
             -- from its current and previous value.
             if s_axis_e_tvalid = '1' then
-                s1_eprev_tdata  <= s_axis_e_tdata;
+                s1_eprev_tdata  <= signed(s_axis_e_tdata);
                 s1_eprev_tvalid <= s_axis_e_tvalid;
             end if;
             if s_axis_e_tvalid = '1' and s1_eprev_tvalid = '1' then
                 s1_tvalid  <= '1';
-                s1_p_tdata <= s_axis_e_tdata;
+                s1_p_tdata <= signed(s_axis_e_tdata);
                 s1_i_tdata <= fixed_add(
-                    s_axis_e_tdata, DATA_RADIX,
+                    signed(s_axis_e_tdata), DATA_RADIX,
                     s1_i_tdata, S1_DATA_RADIX,
                     s1_i_tdata, S1_DATA_RADIX);
                 s1_d_tdata <= fixed_sub(
-                    s_axis_e_tdata, DATA_RADIX,
+                    signed(s_axis_e_tdata), DATA_RADIX,
                     s1_eprev_tdata, DATA_RADIX,
                     s1_d_tdata, S1_DATA_RADIX);
             else
@@ -269,15 +268,15 @@ begin
         else
             s2_tvalid  <= '1';
             s2_p_tdata <= fixed_mul(
-                kp, K_RADIX,
+                signed(kp), K_RADIX,
                 s1_p_tdata, S1_DATA_RADIX,
                 s2_p_tdata, S2_DATA_RADIX);
             s2_i_tdata <= fixed_mul(
-                ki, K_RADIX,
+                signed(ki), K_RADIX,
                 s1_i_tdata, S1_DATA_RADIX,
                 s2_i_tdata, S2_DATA_RADIX);
             s2_d_tdata <= fixed_mul(
-                kd, K_RADIX,
+                signed(kd), K_RADIX,
                 s1_d_tdata, S1_DATA_RADIX,
                 s2_d_tdata, S2_DATA_RADIX);
         end if;
@@ -321,7 +320,9 @@ begin
 end process;
 
 -- Outputs.
-m_axis_u_tdata  <= fixed_radix(s3b_pid_tdata, S3B_DATA_RADIX, m_axis_u_tdata, DATA_RADIX);
+m_axis_u_tdata  <= std_logic_vector(fixed_radix(
+    s3b_pid_tdata, S3B_DATA_RADIX,
+    signed(m_axis_u_tdata), DATA_RADIX));
 m_axis_u_tvalid <= s3b_tvalid;
 
 end behavioral;
