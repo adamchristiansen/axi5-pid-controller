@@ -1,2 +1,5 @@
 # Build.
-/build
+*.cf
+*.ghw
+*.o
+pid_controller_tb
