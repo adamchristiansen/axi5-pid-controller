@@ -112,6 +112,22 @@ architecture behavioral of pid_controller is
     signal s3b_tvalid: std_logic;
     signal s3b_pid_tdata: std_logic_vector(S3B_PID_DATA_WIDTH - 1 downto 0);
 
+    --- Perform an arithmetic right shift.
+    ---
+    --- # Arguments
+    ---
+    --- - `a`: The value to shift.
+    --- - `count`: The number of bits to shift. it is a right shift when positive and left shift
+    ---   when negative.
+    function rshift(a: signed; count: integer) return signed is
+    begin
+        if count > 0 then
+            return shift_right(a, count);
+        else
+            return shift_left(a, -count);
+        end if;
+    end function;
+
     --- Change the radix of a fixed-point number.
     ---
     --- # Arguments
@@ -126,11 +142,9 @@ architecture behavioral of pid_controller is
         a: std_logic_vector; a_radix: natural;
         r: std_logic_vector; r_radix: natural
     ) return std_logic_vector is
-        variable right_shift: integer := integer(a_radix) - integer(r_radix);
+        variable shift_count: integer := integer(a_radix) - integer(r_radix);
     begin
-        -- TODO: What if the shift is negative? Does there need to be an if/else or does
-        --       shift_right() appropriately handle a negative shift?
-        return std_logic_vector(resize(shift_right(signed(a), right_shift), r'length));
+        return std_logic_vector(resize(rshift(signed(a), shift_count), r'length));
     end function;
 
     --- Fixed-point addition where numbers are interpreted as signed.
@@ -150,11 +164,9 @@ architecture behavioral of pid_controller is
         b: std_logic_vector; b_radix: natural;
         r: std_logic_vector; r_radix: natural
     ) return std_logic_vector is
-        variable right_shift: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
+        variable shift_count: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
     begin
-        -- TODO: What if the shift is negative? Does there need to be an if/else or does
-        --       shift_right() appropriately handle a negative shift?
-        return std_logic_vector(resize(shift_right(signed(a) + signed(b), right_shift), r'length));
+        return std_logic_vector(resize(rshift(signed(a) + signed(b), shift_count), r'length));
     end function;
 
     --- Fixed-point subtraction where numbers are interpreted as signed.
@@ -174,11 +186,9 @@ architecture behavioral of pid_controller is
         b: std_logic_vector; b_radix: natural;
         r: std_logic_vector; r_radix: natural
     ) return std_logic_vector is
-        variable right_shift: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
+        variable shift_count: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
     begin
-        -- TODO: What if the shift is negative? Does there need to be an if/else or does
-        --       shift_right() appropriately handle a negative shift?
-        return std_logic_vector(resize(shift_right(signed(a) - signed(b), right_shift), r'length));
+        return std_logic_vector(resize(rshift(signed(a) - signed(b), shift_count), r'length));
     end function;
 
     --- Fixed-point multiplication where numbers are interpreted as signed.
@@ -198,11 +208,9 @@ architecture behavioral of pid_controller is
         b: std_logic_vector; b_radix: natural;
         r: std_logic_vector; r_radix: natural
     ) return std_logic_vector is
-        variable right_shift: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
+        variable shift_count: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
     begin
-        -- TODO: What if the shift is negative? Does there need to be an if/else or does
-        --       shift_right() appropriately handle a negative shift?
-        return std_logic_vector(resize(shift_right(signed(a) * signed(b), right_shift), r'length));
+        return std_logic_vector(resize(rshift(signed(a) * signed(b), shift_count), r'length));
     end function;
 begin
 
