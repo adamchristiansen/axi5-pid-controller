@@ -77,40 +77,31 @@ end pid_controller;
 
 architecture behavioral of pid_controller is
     -- Stage 1: Integrate and differentiate.
-    constant S1_P_DATA_WIDTH: natural := DATA_WIDTH;
-    constant S1_I_DATA_WIDTH: natural := INTEGRATOR_WIDTH;
-    constant S1_D_DATA_WIDTH: natural := DATA_WIDTH;
     constant S1_DATA_RADIX: natural := DATA_RADIX;
     signal s1_tvalid: std_logic;
-    signal s1_p_tdata: std_logic_vector(S1_P_DATA_WIDTH - 1 downto 0);
-    signal s1_i_tdata: std_logic_vector(S1_I_DATA_WIDTH - 1 downto 0);
-    signal s1_d_tdata: std_logic_vector(S1_D_DATA_WIDTH - 1 downto 0);
+    signal s1_p_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
+    signal s1_i_tdata: std_logic_vector(INTEGRATOR_WIDTH - 1 downto 0);
+    signal s1_d_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal s1_eprev_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal s1_eprev_tvalid: std_logic;
 
     -- Stage 2: Multiply PID coefficients.
-    constant S2_P_DATA_WIDTH: natural := S1_P_DATA_WIDTH + K_WIDTH;
-    constant S2_I_DATA_WIDTH: natural := S1_I_DATA_WIDTH + K_WIDTH;
-    constant S2_D_DATA_WIDTH: natural := S1_D_DATA_WIDTH + K_WIDTH;
     constant S2_DATA_RADIX: natural := maximum(DATA_RADIX, K_RADIX);
     signal s2_tvalid: std_logic;
-    signal s2_p_tdata: std_logic_vector(S2_P_DATA_WIDTH - 1 downto 0);
-    signal s2_i_tdata: std_logic_vector(S2_I_DATA_WIDTH - 1 downto 0);
-    signal s2_d_tdata: std_logic_vector(S2_D_DATA_WIDTH - 1 downto 0);
+    signal s2_p_tdata: std_logic_vector(s1_p_tdata'length + K_WIDTH - 1 downto 0);
+    signal s2_i_tdata: std_logic_vector(s1_i_tdata'length + K_WIDTH - 1 downto 0);
+    signal s2_d_tdata: std_logic_vector(s1_d_tdata'length + K_WIDTH - 1 downto 0);
 
     -- Stage 3a: Sum P and I terms.
-    signal s3a_tvalid: std_logic;
-    constant S3A_PD_DATA_WIDTH: natural := maximum(S2_P_DATA_WIDTH, S2_D_DATA_WIDTH);
-    constant S3A_I_DATA_WIDTH: natural := S2_I_DATA_WIDTH;
     constant S3A_DATA_RADIX: natural := S2_DATA_RADIX;
-    signal s3a_pd_tdata: std_logic_vector(S3A_PD_DATA_WIDTH - 1 downto 0);
-    signal s3a_i_tdata: std_logic_vector(S3A_I_DATA_WIDTH - 1 downto 0);
+    signal s3a_tvalid: std_logic;
+    signal s3a_pd_tdata: std_logic_vector(maximum(s2_p_tdata'length, s2_d_tdata'length) - 1 downto 0);
+    signal s3a_i_tdata: std_logic_vector(s2_i_tdata'length - 1 downto 0);
 
     -- Stage 3b: Sum PI and D terms.
-    constant S3B_PID_DATA_WIDTH: natural := maximum(S3A_PD_DATA_WIDTH, S3A_I_DATA_WIDTH);
     constant S3B_DATA_RADIX: natural := S3A_DATA_RADIX;
     signal s3b_tvalid: std_logic;
-    signal s3b_pid_tdata: std_logic_vector(S3B_PID_DATA_WIDTH - 1 downto 0);
+    signal s3b_pid_tdata: std_logic_vector(maximum(s3a_pd_tdata'length, s3a_i_tdata'length) - 1 downto 0);
 
     --- Perform an arithmetic right shift.
     ---
