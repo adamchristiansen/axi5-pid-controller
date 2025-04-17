@@ -2,6 +2,8 @@
 -- Copyright (c) 2025 Adam Christiansen
 
 library ieee;
+use ieee.fixed_float_types.all;
+use ieee.fixed_pkg.all;
 use ieee.numeric_std.all;
 use ieee.std_logic_1164.all;
 
@@ -76,131 +78,62 @@ port (
 end pid_controller;
 
 architecture behavioral of pid_controller is
+    -- Inputs.
+    signal e_fixed:  sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal kp_fixed: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
+    signal ki_fixed: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
+    signal kd_fixed: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
+
     -- Stage 1: Integrate and differentiate.
-    constant S1_DATA_RADIX: natural := DATA_RADIX;
     signal s1_tvalid: std_logic;
-    signal s1_p_tdata: signed(DATA_WIDTH - 1 downto 0);
-    signal s1_i_tdata: signed(INTEGRATOR_WIDTH - 1 downto 0);
-    signal s1_d_tdata: signed(DATA_WIDTH - 1 downto 0);
-    signal s1_eprev_tdata: signed(DATA_WIDTH - 1 downto 0);
+    signal s1_p_tdata: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s1_i_tdata: sfixed(INTEGRATOR_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s1_d_tdata: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s1_eprev_tdata: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
     signal s1_eprev_tvalid: std_logic;
 
     -- Stage 2: Multiply PID coefficients.
-    constant S2_DATA_RADIX: natural := maximum(DATA_RADIX, K_RADIX);
     signal s2_tvalid: std_logic;
-    signal s2_p_tdata: signed(s1_p_tdata'length + K_WIDTH - 1 downto 0);
-    signal s2_i_tdata: signed(s1_i_tdata'length + K_WIDTH - 1 downto 0);
-    signal s2_d_tdata: signed(s1_d_tdata'length + K_WIDTH - 1 downto 0);
+    signal s2_p_tdata: sfixed(sfixed_high(s1_p_tdata, '*', kp_fixed)
+        downto sfixed_low(s1_p_tdata, '*', kp_fixed));
+    signal s2_i_tdata: sfixed(sfixed_high(s1_i_tdata, '*', ki_fixed)
+        downto sfixed_low(s1_i_tdata, '*', ki_fixed));
+    signal s2_d_tdata: sfixed(sfixed_high(s1_d_tdata, '*', kd_fixed)
+        downto sfixed_low(s1_d_tdata, '*', kd_fixed));
 
     -- Stage 3a: Sum P and I terms.
-    constant S3A_DATA_RADIX: natural := S2_DATA_RADIX;
+    --
+    -- NOTE: P and D from Stage 2 are the same size (see assertions).
     signal s3a_tvalid: std_logic;
-    signal s3a_pd_tdata: signed(maximum(s2_p_tdata'length, s2_d_tdata'length) - 1 downto 0);
-    signal s3a_i_tdata: signed(s2_i_tdata'length - 1 downto 0);
+    signal s3a_pd_tdata: sfixed(s2_p_tdata'high downto s2_p_tdata'low);
+    signal s3a_i_tdata: sfixed(s2_i_tdata'high downto s2_i_tdata'low);
 
     -- Stage 3b: Sum PI and D terms.
-    constant S3B_DATA_RADIX: natural := S3A_DATA_RADIX;
+    --
+    -- NOTE: I is guaranteed to be the same size or larger than PD from Stage 3a (see assertions).
     signal s3b_tvalid: std_logic;
-    signal s3b_pid_tdata: signed(maximum(s3a_pd_tdata'length, s3a_i_tdata'length) - 1 downto 0);
+    signal s3b_pid_tdata: sfixed(s3a_i_tdata'high downto s3a_i_tdata'low);
 
-    --- Perform an arithmetic right shift.
+    --- A helper function for saturation.
+    ---
+    --- All arithmetic operations in the PID controller should saturate. This function simply
+    --- wraps `ieee.fixed_pkg.resize` for `sfixed` to ensure consistent behavior for all resizes.
     ---
     --- # Arguments
     ---
-    --- - `a`: The value to shift.
-    --- - `count`: The number of bits to shift. it is a right shift when positive and left shift
-    ---   when negative.
-    function rshift(a: signed; count: integer) return signed is
+    --- - `arg`: The `sfixed` to resize.
+    --- - `size_res`: The new size is equal to the size of this value.
+    function resize_saturate(
+        arg: UNRESOLVED_sfixed;
+        constant size_res: sfixed
+    ) return UNRESOLVED_sfixed is
     begin
-        if count > 0 then
-            return shift_right(a, count);
-        else
-            return shift_left(a, -count);
-        end if;
-    end function;
-
-    --- Change the radix of a fixed-point number.
-    ---
-    --- # Arguments
-    --- - `a`: Original.
-    --- - `a_radix`: Radix of original.
-    --- - `r`: Return value storage.
-    --- - `r_radix`: Radix of return value.
-    ---
-    --- The return value itself is passed as an argument so that its size can be determined from its
-    --- attributes.
-    function fixed_radix(
-        a: signed; a_radix: natural;
-        r: signed; r_radix: natural
-    ) return signed is
-        constant SHIFT_COUNT: integer := integer(a_radix) - integer(r_radix);
-    begin
-        return resize(rshift(a, SHIFT_COUNT), r'length);
-    end function;
-
-    --- Fixed-point addition where numbers are interpreted as signed.
-    ---
-    --- # Arguments
-    --- - `a`: Left hand side.
-    --- - `a_radix`: Radix of left hand side.
-    --- - `b`: Right hand side.
-    --- - `b_radix`: Radix of right hand side.
-    --- - `r`: Return value storage.
-    --- - `r_radix`: Radix of return value.
-    ---
-    --- The return value itself is passed as an argument so that its size can be determined from its
-    --- attributes.
-    function fixed_add(
-        a: signed; a_radix: natural;
-        b: signed; b_radix: natural;
-        r: signed; r_radix: natural
-    ) return signed is
-        constant SHIFT_COUNT: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
-    begin
-        return resize(rshift(a + b, SHIFT_COUNT), r'length);
-    end function;
-
-    --- Fixed-point subtraction where numbers are interpreted as signed.
-    ---
-    --- # Arguments
-    --- - `a`: Left hand side.
-    --- - `a_radix`: Radix of left hand side.
-    --- - `b`: Right hand side.
-    --- - `b_radix`: Radix of right hand side.
-    --- - `r`: Return value storage.
-    --- - `r_radix`: Radix of return value.
-    ---
-    --- The return value itself is passed as an argument so that its size can be determined from its
-    --- attributes.
-    function fixed_sub(
-        a: signed; a_radix: natural;
-        b: signed; b_radix: natural;
-        r: signed; r_radix: natural
-    ) return signed is
-    begin
-        return fixed_add(a, a_radix, -b, b_radix, r, r_radix);
-    end function;
-
-    --- Fixed-point multiplication where numbers are interpreted as signed.
-    ---
-    --- # Arguments
-    --- - `a`: Left hand side.
-    --- - `a_radix`: Radix of left hand side.
-    --- - `b`: Right hand side.
-    --- - `b_radix`: Radix of right hand side.
-    --- - `r`: Return value storage.
-    --- - `r_radix`: Radix of return value.
-    ---
-    --- The return value itself is passed as an argument so that its size can be determined from its
-    --- attributes.
-    function fixed_mul(
-        a: signed; a_radix: natural;
-        b: signed; b_radix: natural;
-        r: signed; r_radix: natural
-    ) return signed is
-        constant SHIFT_COUNT: integer := integer(maximum(a_radix, b_radix)) - integer(r_radix);
-    begin
-        return resize(rshift(a * b, SHIFT_COUNT), r'length);
+        return resize(
+            arg,
+            left_index => size_res'high,
+            right_index => size_res'low,
+            overflow_style => fixed_saturate,
+            round_style => fixed_truncate);
     end function;
 begin
 
@@ -218,6 +151,26 @@ assert INTEGRATOR_WIDTH >= DATA_WIDTH
     report "INTEGRATOR_WIDTH must be greater than or equal to K_WIDTH"
     severity failure;
 
+-- Assert guarantees on intermediate signals.
+assert s2_p_tdata'high = s2_d_tdata'high
+    report "Stage 3a: P and D must be the same size"
+    severity failure;
+assert s2_p_tdata'low = s2_d_tdata'low
+    report "Stage 3a: P and D must be the same size"
+    severity failure;
+assert s3a_i_tdata'high >= s3a_pd_tdata'high
+    report "Stage 3b: I must be at least the size of PD"
+    severity failure;
+assert s3a_i_tdata'low >= s3a_pd_tdata'low
+    report "Stage 3b: I must be at least the size of PD"
+    severity failure;
+
+-- Inputs.
+e_fixed  <= to_sfixed(s_axis_e_tdata, e_fixed);
+kp_fixed <= to_sfixed(kp, kp_fixed);
+ki_fixed <= to_sfixed(ki, ki_fixed);
+kd_fixed <= to_sfixed(kd, kd_fixed);
+
 -- Stage 1: Integrate and differentiate.
 stage1_p: process (aclk)
 begin
@@ -233,20 +186,14 @@ begin
             -- The idea is to delay the error signal by 1 so that the derivative can be computed
             -- from its current and previous value.
             if s_axis_e_tvalid = '1' then
-                s1_eprev_tdata  <= signed(s_axis_e_tdata);
+                s1_eprev_tdata  <= e_fixed;
                 s1_eprev_tvalid <= s_axis_e_tvalid;
             end if;
             if s_axis_e_tvalid = '1' and s1_eprev_tvalid = '1' then
                 s1_tvalid  <= '1';
-                s1_p_tdata <= signed(s_axis_e_tdata);
-                s1_i_tdata <= fixed_add(
-                    signed(s_axis_e_tdata), DATA_RADIX,
-                    s1_i_tdata, S1_DATA_RADIX,
-                    s1_i_tdata, S1_DATA_RADIX);
-                s1_d_tdata <= fixed_sub(
-                    signed(s_axis_e_tdata), DATA_RADIX,
-                    s1_eprev_tdata, DATA_RADIX,
-                    s1_d_tdata, S1_DATA_RADIX);
+                s1_p_tdata <= e_fixed;
+                s1_i_tdata <= resize_saturate(e_fixed + s1_i_tdata, s1_i_tdata);
+                s1_d_tdata <= resize_saturate(e_fixed - s1_eprev_tdata, s1_d_tdata);
             else
                 s1_tvalid <= '0';
                 -- It is important to to set the other values to zero in here, because the
@@ -267,18 +214,9 @@ begin
             s2_d_tdata <= (others => '0');
         else
             s2_tvalid  <= '1';
-            s2_p_tdata <= fixed_mul(
-                signed(kp), K_RADIX,
-                s1_p_tdata, S1_DATA_RADIX,
-                s2_p_tdata, S2_DATA_RADIX);
-            s2_i_tdata <= fixed_mul(
-                signed(ki), K_RADIX,
-                s1_i_tdata, S1_DATA_RADIX,
-                s2_i_tdata, S2_DATA_RADIX);
-            s2_d_tdata <= fixed_mul(
-                signed(kd), K_RADIX,
-                s1_d_tdata, S1_DATA_RADIX,
-                s2_d_tdata, S2_DATA_RADIX);
+            s2_p_tdata <= resize_saturate(kp_fixed * s1_p_tdata, s2_p_tdata);
+            s2_i_tdata <= resize_saturate(ki_fixed * s1_i_tdata, s2_i_tdata);
+            s2_d_tdata <= resize_saturate(kd_fixed * s1_d_tdata, s2_d_tdata);
         end if;
     end if;
 end process;
@@ -293,10 +231,7 @@ begin
             s3a_i_tdata  <= (others => '0');
         else
             s3a_tvalid   <= '1';
-            s3a_pd_tdata <= fixed_add(
-                s2_p_tdata, S2_DATA_RADIX,
-                s2_d_tdata, S2_DATA_RADIX,
-                s3a_pd_tdata, S3A_DATA_RADIX);
+            s3a_pd_tdata <= resize_saturate(s2_p_tdata + s2_d_tdata, s3a_pd_tdata);
             s3a_i_tdata  <= s2_i_tdata;
         end if;
     end if;
@@ -311,18 +246,13 @@ begin
             s3b_pid_tdata <= (others => '0');
         else
             s3b_tvalid    <= '1';
-            s3b_pid_tdata <= fixed_add(
-                s3a_pd_tdata, S3A_DATA_RADIX,
-                s3a_i_tdata, S3A_DATA_RADIX,
-                s3b_pid_tdata, S3B_DATA_RADIX);
+            s3b_pid_tdata <= resize_saturate(s3a_pd_tdata + s3a_i_tdata, s3b_pid_tdata);
         end if;
     end if;
 end process;
 
 -- Outputs.
-m_axis_u_tdata  <= std_logic_vector(fixed_radix(
-    s3b_pid_tdata, S3B_DATA_RADIX,
-    signed(m_axis_u_tdata), DATA_RADIX));
+m_axis_u_tdata  <= to_slv(s3b_pid_tdata(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX));
 m_axis_u_tvalid <= s3b_tvalid;
 
 end behavioral;
