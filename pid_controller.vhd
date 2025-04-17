@@ -94,12 +94,18 @@ architecture behavioral of pid_controller is
 
     -- Stage 2: Multiply PID coefficients.
     signal s2_tvalid: std_logic;
-    signal s2_p_tdata: sfixed(sfixed_high(s1_p_tdata, '*', kp_fixed)
-        downto sfixed_low(s1_p_tdata, '*', kp_fixed));
-    signal s2_i_tdata: sfixed(sfixed_high(s1_i_tdata, '*', ki_fixed)
-        downto sfixed_low(s1_i_tdata, '*', ki_fixed));
-    signal s2_d_tdata: sfixed(sfixed_high(s1_d_tdata, '*', kd_fixed)
-        downto sfixed_low(s1_d_tdata, '*', kd_fixed));
+    signal s2_p_tdata: sfixed(
+        sfixed_high(s1_p_tdata'high, s1_p_tdata'low, '*', kp_fixed'high, kp_fixed'low)
+        downto
+        sfixed_low(s1_p_tdata'high, s1_p_tdata'low, '*', kp_fixed'high, kp_fixed'low));
+    signal s2_i_tdata: sfixed(
+        sfixed_high(s1_i_tdata'high, s1_i_tdata'low, '*', ki_fixed'high, ki_fixed'low)
+        downto
+        sfixed_low(s1_i_tdata'high, s1_i_tdata'low, '*', ki_fixed'high, ki_fixed'low));
+    signal s2_d_tdata: sfixed(
+        sfixed_high(s1_d_tdata'high, s1_d_tdata'low, '*', kd_fixed'high, kd_fixed'low)
+        downto
+        sfixed_low(s1_d_tdata'high, s1_d_tdata'low, '*', kd_fixed'high, kd_fixed'low));
 
     -- Stage 3a: Sum P and I terms.
     --
