@@ -6,6 +6,9 @@ NAME = pid_controller
 all: build
 build: $(NAME)_tb
 test: $(NAME)_tb.ghw
+wave: $(NAME)_tb.ghw
+	gtkwave $< --script=$(NAME)_tb.tcl
+.PHONY: wave
 
 clean:
 	@git clean -fdX
