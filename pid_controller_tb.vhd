@@ -4,6 +4,7 @@
 use std.env.finish;
 
 library ieee;
+use ieee.fixed_pkg.all;
 use ieee.std_logic_1164.all;
 
 entity pid_controller_tb is
@@ -37,7 +38,7 @@ begin
 -- Terminate.
 terminate_p: process
 begin
-    wait for 100 * CLK_PERIOD;
+    wait for 1000 * CLK_PERIOD;
     finish;
 end process;
 
@@ -54,16 +55,25 @@ end process;
 aresetn_p: process
 begin
     pid_aresetn <= '0';
-    wait for 5 * CLK_PERIOD / 2;
+    wait for 5 * CLK_PERIOD;
     pid_aresetn <= '1';
+    wait;
 end process;
 
--- TODO: Drive these inputs.
-pid_s_axis_e_tdata  <= (others => '0');
-pid_s_axis_e_tvalid <= '0';
-pid_kp              <= (others => '0');
-pid_ki              <= (others => '0');
-pid_kd              <= (others => '0');
+-- Drive the PID inputs.
+--
+-- For the test, the setpoint is a constant value that is subtracted from the control variable.
+pid_s_axis_e_tdata  <= to_slv(resize(
+    to_sfixed(10.0, PID_DATA_WIDTH - PID_DATA_RADIX - 1, -PID_DATA_RADIX)
+    -
+    to_sfixed(pid_m_axis_u_tdata, PID_DATA_WIDTH - PID_DATA_RADIX - 1, -PID_DATA_RADIX),
+    left_index => PID_DATA_WIDTH - PID_DATA_RADIX - 1,
+    right_index => -PID_DATA_RADIX
+));
+pid_s_axis_e_tvalid <= '1';
+pid_kp              <= to_slv(to_sfixed(0.10, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
+pid_ki              <= to_slv(to_sfixed(0.03, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
+pid_kd              <= to_slv(to_sfixed(0.00, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
 
 dut: entity work.pid_controller
 generic map (
