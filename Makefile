@@ -17,5 +17,5 @@ $(NAME)_tb: $(NAME).vhd $(NAME)_tb.vhd
 	$(GHDL) elaborate $(GHDLFLAGS) $@
 
 # Run tests.
-$(NAME)_tb.ghw: build
-	$(GHDL) run $(GHDLFLAGS) $(NAME)_tb --wave="$@"
+$(NAME)_tb.ghw: $(NAME)_tb
+	$(GHDL) run $(GHDLFLAGS) $< --wave="$@"
