@@ -38,7 +38,7 @@ use ieee.std_logic_1164.all;
 --- # Generics
 ---
 --- - `DATA_WIDTH`: Width in bits of the input and output AXI4/5-Streams.
---- - `DATA_RADIX: Radix position in bits of the fixed-point input and output AXI4/5-Streams.
+--- - `DATA_RADIX`: Radix position in bits of the fixed-point input and output AXI4/5-Streams.
 --- - `K_WIDTH`: Width in bits of the input `kp`, `ki`, and `kd` coefficients.
 --- - `K_RADIX`: Radix position in bits of the input `kp`, `ki`, and `kd` coefficients.
 --- - `INTEGRATOR_WIDTH`: Width in bits of the internal integrator. Can be used to set the
@@ -58,7 +58,7 @@ generic (
     DATA_WIDTH: natural := 16;
     DATA_RADIX: natural := 0;
     K_WIDTH: natural := DATA_WIDTH;
-    K_RADIX: natural := 0;
+    K_RADIX: natural := DATA_RADIX;
     INTEGRATOR_WIDTH: natural := DATA_WIDTH
 );
 port (
