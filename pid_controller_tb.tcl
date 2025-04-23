@@ -56,4 +56,4 @@ foreach name {
 
 # View settings.
 gtkwave::nop
-gtkwave::/Time/Zoom/Zoom_Full # Show all values.
+gtkwave::/Time/Zoom/Zoom_Full
