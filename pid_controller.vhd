@@ -78,13 +78,13 @@ port (
 end pid_controller;
 
 architecture behavioral of pid_controller is
-    -- Inputs.
+    --- Inputs.
     signal e_fixed:  sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
     signal kp_fixed: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
     signal ki_fixed: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
     signal kd_fixed: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
 
-    -- Stage 1: Integrate and differentiate.
+    --- Stage 1: Integrate and differentiate.
     signal s1_tvalid: std_logic;
     signal s1_p_tdata: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
     signal s1_i_tdata: sfixed(INTEGRATOR_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
@@ -92,7 +92,7 @@ architecture behavioral of pid_controller is
     signal s1_eprev_tdata: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
     signal s1_eprev_tvalid: std_logic;
 
-    -- Stage 2: Multiply PID coefficients.
+    --- Stage 2: Multiply PID coefficients.
     signal s2_tvalid: std_logic;
     signal s2_p_tdata: sfixed(
         sfixed_high(s1_p_tdata'high, s1_p_tdata'low, '*', kp_fixed'high, kp_fixed'low)
@@ -107,16 +107,16 @@ architecture behavioral of pid_controller is
         downto
         sfixed_low(s1_d_tdata'high, s1_d_tdata'low, '*', kd_fixed'high, kd_fixed'low));
 
-    -- Stage 3a: Sum P and I terms.
-    --
-    -- NOTE: P and D from Stage 2 are the same size (see assertions).
+    --- Stage 3a: Sum P and I terms.
+    ---
+    --- NOTE: P and D from Stage 2 are the same size (see assertions).
     signal s3a_tvalid: std_logic;
     signal s3a_pd_tdata: sfixed(s2_p_tdata'high downto s2_p_tdata'low);
     signal s3a_i_tdata: sfixed(s2_i_tdata'high downto s2_i_tdata'low);
 
-    -- Stage 3b: Sum PI and D terms.
-    --
-    -- NOTE: I is guaranteed to be the same size or larger than PD from Stage 3a (see assertions).
+    --- Stage 3b: Sum PI and D terms.
+    ---
+    --- NOTE: I is guaranteed to be the same size or larger than PD from Stage 3a (see assertions).
     signal s3b_tvalid: std_logic;
     signal s3b_pid_tdata: sfixed(s3a_i_tdata'high downto s3a_i_tdata'low);
 
