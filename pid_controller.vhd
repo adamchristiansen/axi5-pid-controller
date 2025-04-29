@@ -120,19 +120,20 @@ architecture behavioral of pid_controller is
     signal s3b_tvalid: std_logic;
     signal s3b_pid_tdata: sfixed(s3a_i_tdata'high downto s3a_i_tdata'low);
 
-    --- A helper function for saturation.
+    --- A helper function that resizes `arg` to match `size_res` with consistent rounding and
+    --- overflow semantics.
     ---
-    --- All arithmetic operations in the PID controller should saturate. This function simply
-    --- wraps `ieee.fixed_pkg.resize` for `sfixed` to ensure consistent behavior for all resizes.
+    --- All arithmetic operations in the PID controller should saturate. This function simply wraps
+    --- `ieee.fixed_pkg.resize` for `sfixed` to ensure consistent behavior for all resizes.
     ---
     --- # Arguments
     ---
     --- - `arg`: The `sfixed` to resize.
     --- - `size_res`: The new size is equal to the size of this value.
-    function resize_saturate(
-        arg: UNRESOLVED_sfixed;
+    function resize_consistent(
+        arg: sfixed;
         constant size_res: sfixed
-    ) return UNRESOLVED_sfixed is
+    ) return sfixed is
     begin
         return resize(
             arg,
@@ -198,8 +199,8 @@ begin
             if s_axis_e_tvalid = '1' and s1_eprev_tvalid = '1' then
                 s1_tvalid  <= '1';
                 s1_p_tdata <= e_fixed;
-                s1_i_tdata <= resize_saturate(e_fixed + s1_i_tdata, s1_i_tdata);
-                s1_d_tdata <= resize_saturate(e_fixed - s1_eprev_tdata, s1_d_tdata);
+                s1_i_tdata <= resize_consistent(e_fixed + s1_i_tdata, s1_i_tdata);
+                s1_d_tdata <= resize_consistent(e_fixed - s1_eprev_tdata, s1_d_tdata);
             else
                 s1_tvalid <= '0';
                 -- It is important to to set the other values to zero in here, because the
@@ -220,9 +221,9 @@ begin
             s2_d_tdata <= (others => '0');
         else
             s2_tvalid  <= '1';
-            s2_p_tdata <= resize_saturate(kp_fixed * s1_p_tdata, s2_p_tdata);
-            s2_i_tdata <= resize_saturate(ki_fixed * s1_i_tdata, s2_i_tdata);
-            s2_d_tdata <= resize_saturate(kd_fixed * s1_d_tdata, s2_d_tdata);
+            s2_p_tdata <= resize_consistent(kp_fixed * s1_p_tdata, s2_p_tdata);
+            s2_i_tdata <= resize_consistent(ki_fixed * s1_i_tdata, s2_i_tdata);
+            s2_d_tdata <= resize_consistent(kd_fixed * s1_d_tdata, s2_d_tdata);
         end if;
     end if;
 end process;
@@ -237,7 +238,7 @@ begin
             s3a_i_tdata  <= (others => '0');
         else
             s3a_tvalid   <= '1';
-            s3a_pd_tdata <= resize_saturate(s2_p_tdata + s2_d_tdata, s3a_pd_tdata);
+            s3a_pd_tdata <= resize_consistent(s2_p_tdata + s2_d_tdata, s3a_pd_tdata);
             s3a_i_tdata  <= s2_i_tdata;
         end if;
     end if;
@@ -252,7 +253,7 @@ begin
             s3b_pid_tdata <= (others => '0');
         else
             s3b_tvalid    <= '1';
-            s3b_pid_tdata <= resize_saturate(s3a_pd_tdata + s3a_i_tdata, s3b_pid_tdata);
+            s3b_pid_tdata <= resize_consistent(s3a_pd_tdata + s3a_i_tdata, s3b_pid_tdata);
         end if;
     end if;
 end process;
