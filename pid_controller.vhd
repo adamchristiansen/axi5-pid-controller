@@ -151,6 +151,9 @@ assert DATA_WIDTH mod 8 = 0
 assert DATA_RADIX <= DATA_WIDTH
     report "DATA_RADIX must be less than or equal to DATA_WIDTH"
     severity failure;
+assert K_WIDTH > 0
+    report "K_WIDTH must be greater than 0"
+    severity failure;
 assert K_RADIX <= K_WIDTH
     report "K_RADIX must be less than or equal to K_WIDTH"
     severity failure;
