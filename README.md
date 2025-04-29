@@ -85,7 +85,7 @@ signals using more sophisticated approaches.
 
 ## Testing
 
-The makefile has the following recipes:
+The [`Makefile`](./Makefile) has the following recipes:
 
 - `make`: Alias for `make build`.
 - `make build`: Analyze and elaborate the source and test files.
