@@ -16,20 +16,20 @@ is
     constant CLK_PERIOD : time := 10 ns;
 
     --- PID.
-    constant PID_DATA_WIDTH: natural := 24;
-    constant PID_DATA_RADIX: natural := 10;
-    constant PID_K_WIDTH: natural := PID_DATA_WIDTH;
-    constant PID_K_RADIX: natural := PID_DATA_RADIX;
-    constant PID_INTEGRATOR_WIDTH: natural := PID_DATA_WIDTH + 8;
+    constant DATA_WIDTH: natural := 24;
+    constant DATA_RADIX: natural := 10;
+    constant K_WIDTH: natural := DATA_WIDTH;
+    constant K_RADIX: natural := DATA_RADIX;
+    constant INTEGRATOR_WIDTH: natural := DATA_WIDTH + 8;
     signal aclk: std_logic;
     signal aresetn: std_logic;
-    signal s_axis_e_tdata: std_logic_vector(PID_DATA_WIDTH - 1 downto 0);
+    signal s_axis_e_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal s_axis_e_tvalid: std_logic;
-    signal m_axis_u_tdata: std_logic_vector(PID_DATA_WIDTH - 1 downto 0);
+    signal m_axis_u_tdata: std_logic_vector(DATA_WIDTH - 1 downto 0);
     signal m_axis_u_tvalid: std_logic;
-    signal kp: std_logic_vector(PID_K_WIDTH - 1 downto 0);
-    signal ki: std_logic_vector(PID_K_WIDTH - 1 downto 0);
-    signal kd: std_logic_vector(PID_K_WIDTH - 1 downto 0);
+    signal kp: std_logic_vector(K_WIDTH - 1 downto 0);
+    signal ki: std_logic_vector(K_WIDTH - 1 downto 0);
+    signal kd: std_logic_vector(K_WIDTH - 1 downto 0);
 
     --- Change the PID coefficients and assert the reset.
     ---
@@ -47,15 +47,15 @@ is
         constant i: in real;
         constant d: in real;
         signal rn_sig: out std_logic;
-        signal kp_sig: out std_logic_vector(PID_K_WIDTH - 1 downto 0);
-        signal ki_sig: out std_logic_vector(PID_K_WIDTH - 1 downto 0);
-        signal kd_sig: out std_logic_vector(PID_K_WIDTH - 1 downto 0)
+        signal kp_sig: out std_logic_vector(K_WIDTH - 1 downto 0);
+        signal ki_sig: out std_logic_vector(K_WIDTH - 1 downto 0);
+        signal kd_sig: out std_logic_vector(K_WIDTH - 1 downto 0)
     ) is
     begin
         rn_sig <= '0';
-        kp_sig <= to_slv(to_sfixed(p, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
-        ki_sig <= to_slv(to_sfixed(i, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
-        kd_sig <= to_slv(to_sfixed(d, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
+        kp_sig <= to_slv(to_sfixed(p, K_WIDTH - K_RADIX - 1, -K_RADIX));
+        ki_sig <= to_slv(to_sfixed(i, K_WIDTH - K_RADIX - 1, -K_RADIX));
+        kd_sig <= to_slv(to_sfixed(d, K_WIDTH - K_RADIX - 1, -K_RADIX));
         wait for 100 * CLK_PERIOD;
         rn_sig <= '1';
         wait for 400 * CLK_PERIOD;
@@ -78,7 +78,7 @@ is
         variable next_e: PrevE;
     begin
         next_e(next_e'low) := to_real(to_sfixed(e,
-            PID_DATA_WIDTH - PID_DATA_RADIX - 1, -PID_DATA_RADIX));
+            DATA_WIDTH - DATA_RADIX - 1, -DATA_RADIX));
         for i in next_e'low to next_e'high - 1 loop
             next_e(i + 1) := prev_e(i);
         end loop;
@@ -113,7 +113,7 @@ begin
     aclk <= '0';
     wait for CLK_PERIOD / 2;
     aclk <= '1';
-    prev_e   <= push(s_axis_e_tdata);
+    prev_e <= push(s_axis_e_tdata);
     wait for CLK_PERIOD / 2;
 end process;
 
@@ -144,21 +144,21 @@ end process;
 -- For the test, the error signal is computed from a constant setpoint from which the control
 -- variable is subtracted.
 s_axis_e_tdata <= to_slv(resize(
-    to_sfixed(10.0, PID_DATA_WIDTH - PID_DATA_RADIX - 1, -PID_DATA_RADIX)
+    to_sfixed(10.0, DATA_WIDTH - DATA_RADIX - 1, -DATA_RADIX)
     -
-    to_sfixed(m_axis_u_tdata, PID_DATA_WIDTH - PID_DATA_RADIX - 1, -PID_DATA_RADIX),
-    left_index => PID_DATA_WIDTH - PID_DATA_RADIX - 1,
-    right_index => -PID_DATA_RADIX
+    to_sfixed(m_axis_u_tdata, DATA_WIDTH - DATA_RADIX - 1, -DATA_RADIX),
+    left_index => DATA_WIDTH - DATA_RADIX - 1,
+    right_index => -DATA_RADIX
 ));
 s_axis_e_tvalid <= '1';
 
 dut: entity work.pid_controller
 generic map (
-    DATA_WIDTH => PID_DATA_WIDTH,
-    DATA_RADIX => PID_DATA_RADIX,
-    K_WIDTH => PID_K_WIDTH,
-    K_RADIX => PID_K_RADIX,
-    INTEGRATOR_WIDTH => PID_INTEGRATOR_WIDTH
+    DATA_WIDTH => DATA_WIDTH,
+    DATA_RADIX => DATA_RADIX,
+    K_WIDTH => K_WIDTH,
+    K_RADIX => K_RADIX,
+    INTEGRATOR_WIDTH => INTEGRATOR_WIDTH
 )
 port map (
     aclk => aclk,
