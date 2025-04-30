@@ -21,15 +21,15 @@ is
     constant PID_K_WIDTH: natural := PID_DATA_WIDTH;
     constant PID_K_RADIX: natural := PID_DATA_RADIX;
     constant PID_INTEGRATOR_WIDTH: natural := PID_DATA_WIDTH + 8;
-    signal pid_aclk: std_logic;
-    signal pid_aresetn: std_logic;
-    signal pid_s_axis_e_tdata: std_logic_vector(PID_DATA_WIDTH - 1 downto 0);
-    signal pid_s_axis_e_tvalid: std_logic;
-    signal pid_m_axis_u_tdata: std_logic_vector(PID_DATA_WIDTH - 1 downto 0);
-    signal pid_m_axis_u_tvalid: std_logic;
-    signal pid_kp: std_logic_vector(PID_K_WIDTH - 1 downto 0);
-    signal pid_ki: std_logic_vector(PID_K_WIDTH - 1 downto 0);
-    signal pid_kd: std_logic_vector(PID_K_WIDTH - 1 downto 0);
+    signal aclk: std_logic;
+    signal aresetn: std_logic;
+    signal s_axis_e_tdata: std_logic_vector(PID_DATA_WIDTH - 1 downto 0);
+    signal s_axis_e_tvalid: std_logic;
+    signal m_axis_u_tdata: std_logic_vector(PID_DATA_WIDTH - 1 downto 0);
+    signal m_axis_u_tvalid: std_logic;
+    signal kp: std_logic_vector(PID_K_WIDTH - 1 downto 0);
+    signal ki: std_logic_vector(PID_K_WIDTH - 1 downto 0);
+    signal kd: std_logic_vector(PID_K_WIDTH - 1 downto 0);
 
     --- Change the PID coefficients and assert the reset.
     ---
@@ -38,26 +38,26 @@ is
     --- - `p`: Value of the P coefficient.
     --- - `i`: Value of the I coefficient.
     --- - `d`: Value of the D coefficient.
-    --- - `rn`: Active low reset to write.
-    --- - `kp`: P coefficient to write.
-    --- - `ki`: I coefficient to write.
-    --- - `kd`: D coefficient to write.
+    --- - `rn_sig`: Active low reset to write.
+    --- - `kp_sig`: P coefficient to write.
+    --- - `ki_sig`: I coefficient to write.
+    --- - `kd_sig`: D coefficient to write.
     procedure coefficients(
         constant p: in real;
         constant i: in real;
         constant d: in real;
-        signal rn: out std_logic;
-        signal kp: out std_logic_vector(PID_K_WIDTH - 1 downto 0);
-        signal ki: out std_logic_vector(PID_K_WIDTH - 1 downto 0);
-        signal kd: out std_logic_vector(PID_K_WIDTH - 1 downto 0)
+        signal rn_sig: out std_logic;
+        signal kp_sig: out std_logic_vector(PID_K_WIDTH - 1 downto 0);
+        signal ki_sig: out std_logic_vector(PID_K_WIDTH - 1 downto 0);
+        signal kd_sig: out std_logic_vector(PID_K_WIDTH - 1 downto 0)
     ) is
     begin
-        rn <= '0';
-        kp <= to_slv(to_sfixed(p, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
-        ki <= to_slv(to_sfixed(i, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
-        kd <= to_slv(to_sfixed(d, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
+        rn_sig <= '0';
+        kp_sig <= to_slv(to_sfixed(p, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
+        ki_sig <= to_slv(to_sfixed(i, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
+        kd_sig <= to_slv(to_sfixed(d, PID_K_WIDTH - PID_K_RADIX - 1, -PID_K_RADIX));
         wait for 100 * CLK_PERIOD;
-        rn <= '1';
+        rn_sig <= '1';
         wait for 400 * CLK_PERIOD;
     end procedure;
 
@@ -110,10 +110,10 @@ begin
 -- Clock.
 aclk_p: process
 begin
-    pid_aclk <= '0';
+    aclk <= '0';
     wait for CLK_PERIOD / 2;
-    pid_aclk <= '1';
-    prev_e   <= push(pid_s_axis_e_tdata);
+    aclk <= '1';
+    prev_e   <= push(s_axis_e_tdata);
     wait for CLK_PERIOD / 2;
 end process;
 
@@ -121,36 +121,36 @@ end process;
 coefficients_p: process
 begin
     -- Stable: approach slowly.
-    coefficients(0.010, 0.030, 0.000, pid_aresetn, pid_kp, pid_ki, pid_kd);
+    coefficients(0.010, 0.030, 0.000, aresetn, kp, ki, kd);
     assert rms < 0.001 report "Did not reach setpoint" severity failure;
     -- Stable: approach slowly near critical damping.
-    coefficients(0.050, 0.110, 0.100, pid_aresetn, pid_kp, pid_ki, pid_kd);
+    coefficients(0.050, 0.110, 0.100, aresetn, kp, ki, kd);
     assert rms < 0.001 report "Did not reach setpoint" severity failure;
     -- Underdamped: Oscillate on the way to the setpoint.
-    coefficients(0.100, 0.400, 0.100, pid_aresetn, pid_kp, pid_ki, pid_kd);
+    coefficients(0.100, 0.400, 0.100, aresetn, kp, ki, kd);
     assert rms < 0.001 report "Did not reach setpoint" severity failure;
     -- Overdamped: too slow to to reach the setpoint.
-    coefficients(0.010, 0.003, 0.000, pid_aresetn, pid_kp, pid_ki, pid_kd);
+    coefficients(0.010, 0.003, 0.000, aresetn, kp, ki, kd);
     assert abs mean > 1.000 report "Got too close to the setpoint" severity failure;
     -- Unstable: P and D too large, oscillate about the setpoint.
-    coefficients(0.400, 0.125, 0.300, pid_aresetn, pid_kp, pid_ki, pid_kd);
+    coefficients(0.400, 0.125, 0.300, aresetn, kp, ki, kd);
     assert rms > 0.500 report "Settled too close to the setpoint" severity failure;
     -- Unstable: D too large, oscillate about the setpoint and increase in amplitude.
-    coefficients(0.100, 0.030, 0.49, pid_aresetn, pid_kp, pid_ki, pid_kd);
+    coefficients(0.100, 0.030, 0.49, aresetn, kp, ki, kd);
     assert rms > 1.000 report "Settled too close to the setpoint" severity failure;
     finish;
 end process;
 
 -- For the test, the error signal is computed from a constant setpoint from which the control
 -- variable is subtracted.
-pid_s_axis_e_tdata <= to_slv(resize(
+s_axis_e_tdata <= to_slv(resize(
     to_sfixed(10.0, PID_DATA_WIDTH - PID_DATA_RADIX - 1, -PID_DATA_RADIX)
     -
-    to_sfixed(pid_m_axis_u_tdata, PID_DATA_WIDTH - PID_DATA_RADIX - 1, -PID_DATA_RADIX),
+    to_sfixed(m_axis_u_tdata, PID_DATA_WIDTH - PID_DATA_RADIX - 1, -PID_DATA_RADIX),
     left_index => PID_DATA_WIDTH - PID_DATA_RADIX - 1,
     right_index => -PID_DATA_RADIX
 ));
-pid_s_axis_e_tvalid <= '1';
+s_axis_e_tvalid <= '1';
 
 dut: entity work.pid_controller
 generic map (
@@ -161,15 +161,15 @@ generic map (
     INTEGRATOR_WIDTH => PID_INTEGRATOR_WIDTH
 )
 port map (
-    aclk => pid_aclk,
-    aresetn => pid_aresetn,
-    s_axis_e_tdata => pid_s_axis_e_tdata,
-    s_axis_e_tvalid => pid_s_axis_e_tvalid,
-    m_axis_u_tdata => pid_m_axis_u_tdata,
-    m_axis_u_tvalid => pid_m_axis_u_tvalid,
-    kp => pid_kp,
-    ki => pid_ki,
-    kd => pid_kd
+    aclk => aclk,
+    aresetn => aresetn,
+    s_axis_e_tdata => s_axis_e_tdata,
+    s_axis_e_tvalid => s_axis_e_tvalid,
+    m_axis_u_tdata => m_axis_u_tdata,
+    m_axis_u_tvalid => m_axis_u_tvalid,
+    kp => kp,
+    ki => ki,
+    kd => kd
 );
 
 end behaviour;
