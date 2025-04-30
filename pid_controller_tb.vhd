@@ -110,9 +110,9 @@ begin
 -- Clock.
 aclk_p: process
 begin
-    aclk <= '0';
-    wait for CLK_PERIOD / 2;
     aclk <= '1';
+    wait for CLK_PERIOD / 2;
+    aclk <= '0';
     prev_e <= push(s_axis_e_tdata);
     wait for CLK_PERIOD / 2;
 end process;
