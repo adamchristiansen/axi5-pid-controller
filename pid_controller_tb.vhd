@@ -77,8 +77,7 @@ is
     impure function push(e: std_logic_vector) return PrevE is
         variable next_e: PrevE;
     begin
-        next_e(next_e'low) := to_real(to_sfixed(e,
-            DATA_WIDTH - DATA_RADIX - 1, -DATA_RADIX));
+        next_e(next_e'low) := to_real(to_sfixed(e, DATA_WIDTH - DATA_RADIX - 1, -DATA_RADIX));
         for i in next_e'low to next_e'high - 1 loop
             next_e(i + 1) := prev_e(i);
         end loop;
@@ -121,23 +120,23 @@ end process;
 coefficients_p: process
 begin
     -- Stable: approach slowly.
-    coefficients(0.010, 0.030, 0.000, aresetn, kp, ki, kd);
+    coefficients(0.100, 0.030, 0.000, aresetn, kp, ki, kd);
     assert rms < 0.001 report "Did not reach setpoint" severity failure;
-    -- Stable: approach slowly near critical damping.
-    coefficients(0.050, 0.110, 0.100, aresetn, kp, ki, kd);
+    -- Stable: approach near critical damping.
+    coefficients(0.100, 0.100, 0.000, aresetn, kp, ki, kd);
     assert rms < 0.001 report "Did not reach setpoint" severity failure;
     -- Underdamped: Oscillate on the way to the setpoint.
-    coefficients(0.100, 0.400, 0.100, aresetn, kp, ki, kd);
+    coefficients(0.100, 0.300, 0.000, aresetn, kp, ki, kd);
     assert rms < 0.001 report "Did not reach setpoint" severity failure;
     -- Overdamped: too slow to to reach the setpoint.
-    coefficients(0.010, 0.003, 0.000, aresetn, kp, ki, kd);
+    coefficients(0.000, 0.003, 0.000, aresetn, kp, ki, kd);
     assert abs mean > 1.000 report "Got too close to the setpoint" severity failure;
     -- Unstable: P and D too large, oscillate about the setpoint.
-    coefficients(0.400, 0.125, 0.300, aresetn, kp, ki, kd);
+    coefficients(0.500, 0.300, 0.175, aresetn, kp, ki, kd);
     assert rms > 0.500 report "Settled too close to the setpoint" severity failure;
-    -- Unstable: D too large, oscillate about the setpoint and increase in amplitude.
-    coefficients(0.100, 0.030, 0.49, aresetn, kp, ki, kd);
-    assert rms > 1.000 report "Settled too close to the setpoint" severity failure;
+    -- Unstable: P and D too large, oscillate about the setpoint and increase in amplitude.
+    coefficients(0.110, 0.300, 0.395, aresetn, kp, ki, kd);
+    assert rms > 5.000 report "Settled too close to the setpoint" severity failure;
     finish;
 end process;
 
