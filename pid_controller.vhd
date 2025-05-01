@@ -78,47 +78,28 @@ port (
 end pid_controller;
 
 architecture behavioral of pid_controller is
-    --- Inputs.
-    signal e_fixed:  sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
-    signal kp_fixed: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
-    signal ki_fixed: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
-    signal kd_fixed: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
-
-    --- Stage 1: Integrate and differentiate.
-    signal s1_tvalid: std_logic;
-    signal s1_p_tdata: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
-    signal s1_i_tdata: sfixed(INTEGRATOR_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
-    signal s1_d_tdata: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
-    signal s1_eprev_tdata: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
-    signal s1_eprev_tvalid: std_logic;
-
-    --- Stage 2: Multiply PID coefficients.
-    signal s2_tvalid: std_logic;
-    signal s2_p_tdata: sfixed(
-        sfixed_high(s1_p_tdata'high, s1_p_tdata'low, '*', kp_fixed'high, kp_fixed'low)
-        downto
-        sfixed_low(s1_p_tdata'high, s1_p_tdata'low, '*', kp_fixed'high, kp_fixed'low));
-    signal s2_i_tdata: sfixed(
-        sfixed_high(s1_i_tdata'high, s1_i_tdata'low, '*', ki_fixed'high, ki_fixed'low)
-        downto
-        sfixed_low(s1_i_tdata'high, s1_i_tdata'low, '*', ki_fixed'high, ki_fixed'low));
-    signal s2_d_tdata: sfixed(
-        sfixed_high(s1_d_tdata'high, s1_d_tdata'low, '*', kd_fixed'high, kd_fixed'low)
-        downto
-        sfixed_low(s1_d_tdata'high, s1_d_tdata'low, '*', kd_fixed'high, kd_fixed'low));
-
-    --- Stage 3a: Sum P and I terms.
-    ---
-    --- NOTE: P and D from Stage 2 are the same size (see assertions).
-    signal s3a_tvalid: std_logic;
-    signal s3a_pd_tdata: sfixed(s2_p_tdata'high downto s2_p_tdata'low);
-    signal s3a_i_tdata: sfixed(s2_i_tdata'high downto s2_i_tdata'low);
-
-    --- Stage 3b: Sum PI and D terms.
-    ---
-    --- NOTE: I is guaranteed to be the same size or larger than PD from Stage 3a (see assertions).
-    signal s3b_tvalid: std_logic;
-    signal s3b_pid_tdata: sfixed(s3a_i_tdata'high downto s3a_i_tdata'low);
+    --- Stage 0: Capture one point.
+    signal s0_seen: boolean;
+    signal s0_valid: boolean;
+    signal s0_e: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s0_e_prev: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s0_kp: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
+    signal s0_ki: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
+    signal s0_kd: sfixed(K_WIDTH - K_RADIX - 1 downto -K_RADIX);
+    -- Stage 1: Integrate and differentiate.
+    signal s1_valid: boolean;
+    signal s1_p: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s1_i: sfixed(INTEGRATOR_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s1_d: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    -- Stage 2: Multiply PID coefficients.
+    signal s2_valid: boolean;
+    signal s2_p: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s2_i: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s2_d: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    -- Stage 3: Sum P and I terms.
+    signal s3_valid: boolean;
+    signal s3_pi: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
+    signal s3_d: sfixed(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX);
 
     --- A helper function that resizes `arg` to match `size_res` with consistent rounding and
     --- overflow semantics.
@@ -161,108 +142,70 @@ assert INTEGRATOR_WIDTH >= DATA_WIDTH
     report "INTEGRATOR_WIDTH must be greater than or equal to K_WIDTH"
     severity failure;
 
--- Assert guarantees on intermediate signals.
-assert s2_p_tdata'high = s2_d_tdata'high
-    report "Stage 3a: P and D must be the same size"
-    severity failure;
-assert s2_p_tdata'low = s2_d_tdata'low
-    report "Stage 3a: P and D must be the same size"
-    severity failure;
-assert s3a_i_tdata'high >= s3a_pd_tdata'high
-    report "Stage 3b: I must be at least the size of PD"
-    severity failure;
-assert s3a_i_tdata'low >= s3a_pd_tdata'low
-    report "Stage 3b: I must be at least the size of PD"
-    severity failure;
-
--- Inputs.
-e_fixed  <= to_sfixed(s_axis_e_tdata, e_fixed);
-kp_fixed <= to_sfixed(kp, kp_fixed);
-ki_fixed <= to_sfixed(ki, ki_fixed);
-kd_fixed <= to_sfixed(kd, kd_fixed);
-
--- Stage 1: Integrate and differentiate.
-stage1_p: process (aclk)
+pid_p: process (aclk)
 begin
     if rising_edge(aclk) then
         if aresetn = '0' then
-            s1_tvalid       <= '0';
-            s1_p_tdata      <= (others => '0');
-            s1_i_tdata      <= (others => '0');
-            s1_d_tdata      <= (others => '0');
-            s1_eprev_tdata  <= (others => '0');
-            s1_eprev_tvalid <= '0';
+            -- Stage 0: Setup.
+            s0_seen   <= false;
+            s0_valid  <= false;
+            s0_e      <= (others => '0');
+            s0_e_prev <= (others => '0');
+            s0_kp     <= (others => '0');
+            s0_ki     <= (others => '0');
+            s0_kd     <= (others => '0');
+            -- Stage 1: Integrate and differentiate.
+            s1_valid <= false;
+            s1_p     <= (others => '0');
+            s1_i     <= (others => '0');
+            s1_d     <= (others => '0');
+            -- Stage 2: Multiply PID coefficients.
+            s2_valid <= false;
+            s2_p     <= (others => '0');
+            s2_i     <= (others => '0');
+            s2_d     <= (others => '0');
+            -- Stage 3: Sum P and I terms.
+            s3_valid <= false;
+            s3_pi    <= (others => '0');
+            s3_d     <= (others => '0');
+            -- Outputs.
+            m_axis_u_tdata  <= (others => '0');
+            m_axis_u_tvalid <= '0';
         else
-            -- The idea is to delay the error signal by 1 so that the derivative can be computed
-            -- from its current and previous value.
+            -- Stage 0: Setup.
             if s_axis_e_tvalid = '1' then
-                s1_eprev_tdata  <= e_fixed;
-                s1_eprev_tvalid <= s_axis_e_tvalid;
+                s0_seen   <= true;
+                s0_e      <= to_sfixed(s_axis_e_tdata, s0_e);
+                s0_e_prev <= s0_e when s0_seen else to_sfixed(s_axis_e_tdata, s0_e);
             end if;
-            if s_axis_e_tvalid = '1' and s1_eprev_tvalid = '1' then
-                s1_tvalid  <= '1';
-                s1_p_tdata <= e_fixed;
-                s1_i_tdata <= resize_consistent(e_fixed + s1_i_tdata, s1_i_tdata);
-                s1_d_tdata <= resize_consistent(e_fixed - s1_eprev_tdata, s1_d_tdata);
+            s0_valid <= s_axis_e_tvalid = '1';
+            s0_kp    <= to_sfixed(kp, s0_kp);
+            s0_ki    <= to_sfixed(ki, s0_ki);
+            s0_kd    <= to_sfixed(kd, s0_kd);
+            -- Stage 1: Integrate and differentiate.
+            s1_valid <= s0_valid;
+            s1_p     <= s0_e;
+            s1_i     <= resize_consistent(s1_i + s0_e, s1_i);
+            s1_d     <= resize_consistent(s0_e - s0_e_prev, s1_d);
+            -- Stage 2: Multiply PID coefficients.
+            s2_valid <= s1_valid;
+            s2_p     <= resize_consistent(s0_kp * s1_p, s2_p);
+            s2_i     <= resize_consistent(s0_ki * s1_i, s2_i);
+            s2_d     <= resize_consistent(s0_kd * s1_d, s2_d);
+            -- Stage 3: Sum P and I terms.
+            s3_valid <= s2_valid;
+            s3_pi    <= resize_consistent(s2_p + s2_i, s3_pi);
+            s3_d     <= s2_d;
+            -- Stage 4: Sum PI and D terms and set outputs.
+            if s3_valid then
+                m_axis_u_tdata <= to_slv(resize_consistent(s3_pi + s3_d, s3_pi));
+                m_axis_u_tvalid <= '1';
             else
-                s1_tvalid <= '0';
-                -- It is important to to set the other values to zero in here, because the
-                -- accumulator for the integrator must be preserved.
+                m_axis_u_tdata  <= (others => '0');
+                m_axis_u_tvalid <= '0';
             end if;
         end if;
     end if;
 end process;
-
--- Stage 2: Multiply PID coefficients.
-stage2_p: process (aclk)
-begin
-    if rising_edge(aclk) then
-        if aresetn = '0' or s1_tvalid /= '1' then
-            s2_tvalid  <= '0';
-            s2_p_tdata <= (others => '0');
-            s2_i_tdata <= (others => '0');
-            s2_d_tdata <= (others => '0');
-        else
-            s2_tvalid  <= '1';
-            s2_p_tdata <= resize_consistent(kp_fixed * s1_p_tdata, s2_p_tdata);
-            s2_i_tdata <= resize_consistent(ki_fixed * s1_i_tdata, s2_i_tdata);
-            s2_d_tdata <= resize_consistent(kd_fixed * s1_d_tdata, s2_d_tdata);
-        end if;
-    end if;
-end process;
-
--- Stage 3a: Sum P and I terms.
-stage3a_p: process (aclk)
-begin
-    if rising_edge(aclk) then
-        if aresetn = '0' or s2_tvalid /= '1' then
-            s3a_tvalid   <= '0';
-            s3a_pd_tdata <= (others => '0');
-            s3a_i_tdata  <= (others => '0');
-        else
-            s3a_tvalid   <= '1';
-            s3a_pd_tdata <= resize_consistent(s2_p_tdata + s2_d_tdata, s3a_pd_tdata);
-            s3a_i_tdata  <= s2_i_tdata;
-        end if;
-    end if;
-end process;
-
--- Stage 3b: Sum PI and D terms.
-stage3b_p: process (aclk)
-begin
-    if rising_edge(aclk) then
-        if aresetn = '0' or s3a_tvalid /= '1' then
-            s3b_tvalid    <= '0';
-            s3b_pid_tdata <= (others => '0');
-        else
-            s3b_tvalid    <= '1';
-            s3b_pid_tdata <= resize_consistent(s3a_pd_tdata + s3a_i_tdata, s3b_pid_tdata);
-        end if;
-    end if;
-end process;
-
--- Outputs.
-m_axis_u_tdata  <= to_slv(s3b_pid_tdata(DATA_WIDTH - DATA_RADIX - 1 downto -DATA_RADIX));
-m_axis_u_tvalid <= s3b_tvalid;
 
 end behavioral;
