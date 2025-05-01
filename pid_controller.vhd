@@ -4,7 +4,6 @@
 library ieee;
 use ieee.fixed_float_types.all;
 use ieee.fixed_pkg.all;
-use ieee.numeric_std.all;
 use ieee.std_logic_1164.all;
 
 --- A PID controller.
